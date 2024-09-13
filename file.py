@@ -16,8 +16,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 #BASE_DIR2 = '/home/moi1/Documents/dev_py/vision/PROJET_Face-Tracking-camera/'
 
 DATAPATH = join(BASE_DIR,'faces_data')
-
-
+       
 def isValidJPG(f):
     """DeprecationWarning: 'imghdr' is deprecated 
     and slated for removal in Python 3.13"""
@@ -38,23 +37,40 @@ def saveVideo(video):
     NotImplemented
     
     return output_video
-      
+    
+def isNameDir(name_dir):
+    return isdir(join(DATAPATH,name_dir))
+  
+def createNameDir(name_dir):
+    """  Create a directory named {name_dir},
+        that is used to contain the face images called {name_dir}_{numero}.
+    """
+    try: 
+        os.mkdir(join(DATAPATH,name_dir))
+    except FileExistsError as e:
+        print(e)        
+           
 def listFaceNames():
     """
-    Returns  the list of all face_names.
+    Returns  the list of all face_names that are not stranger.
 
     Assuming:
          Filenames in in DATAPATH either
                 correspond to our face names ('{face_name}'),
-                or  be 'unknown', 'unknow_new' or '{face_name}_new'"""
+                or  be 'stranger', 'stranger_new' or '{face_name}_new'"""
     return [f for f in listdir(DATAPATH) 
-                  if   '_new' not in f 
-                  and  'unknown' not in f
-                  and  isdir(join(DATAPATH,f)) 
+                  if   isNameDir(f)
+                  and '_new' not in f 
+                  and  'stranger' not in f 
             ] 
     
+def listStrangers():
+    return [f for f in listdir(DATAPATH) 
+                  if   isNameDir(f)
+                  and  'stranger' in f 
+            ] 
     
-def readFaceImgs_v1(filename = 'unknowns_new'):
+def readFaceImgs_v1(filename = 'strangers_new'):
     """ returns a list of all images of name <name> """
     name_dir = join(DATAPATH, filename.lower())
     imgs = list()
@@ -91,7 +107,7 @@ def yieldFaceImgs(face_name):
                 continue    
     
     
-def readImgFiles(filename = 'unknowns_new', number=-1):
+def readImgFiles(filename = 'strangers_new', number=-1):
     """  Reads and returns at most {number} images in directory {filemame} 
     
     Default number =-1 means we loop over all files in {name_dir}
@@ -168,9 +184,9 @@ def cropBoxes(img, boxes, inGray=False):
       
     
 def count(name_dir):
-    return len([f for f in os.listdir(name_dir) ]) 
+    return len(listdir(name_dir) ) 
 
-def save_face_img(face_name,face_img, file_id=None):
+def saveFaceImg(face_name,face_img, file_id=None):
     """Save  the face_image in file path = 
                 .../faces_data/{face_name}/{face_name}_{numero}.jpg
     Args:
@@ -192,7 +208,7 @@ def save_face_imgs(face_names,face_imgs,file_ids, name2save =None):
     face_imgs   list    face image corresponding to face name
     file_ids     list   file id corresponding to the image and name (all aligned in list)
     name2save: List of the face names for which we save the face image
-               can include 'unknown', person names
+               can include 'stranger', person names
                When None, it means all names are saved 
     """
     if name2save is None: name2save = face_names # a list of face names
@@ -204,7 +220,7 @@ def save_face_imgs(face_names,face_imgs,file_ids, name2save =None):
         #print(face_name)
         if face_name in name2save and face_img is not None:                 
             try: 
-                save_face_img(face_name,face_img,file_id) 
+                saveFaceImg(face_name,face_img,file_id) 
                 print(f'{n}: a face from file #{file_id} of {face_name} has been saved.')      
                 
             except SyntaxError as e : 
@@ -215,6 +231,16 @@ def save_face_imgs(face_names,face_imgs,file_ids, name2save =None):
     if len(notSaved)==0: 
         print('No error have been caught during saving')                    
     return notSaved
+
+
+def saveNewFaceImg(face_name, faceImg):
+    if not isNameDir(face_name):
+        createNameDir(face_name)
+        print(f'We just created a directory named \'{face_name}\' ')
+
+    saveFaceImg(face_name,faceImg)
+    print(f'We just saved the new face image in the directory named \'{face_name}\' ')
+
    
 def test_readImgs_cv():  
     name_dir = join(DATAPATH, 'audrey_new')
@@ -248,4 +274,4 @@ def test_readImgs_cv():
                     
 if __name__ == '__main__':
     
-    imgs=test_readImgs_cv()  # No problem                
+    imgs=test_readImgs_cv()  #                 

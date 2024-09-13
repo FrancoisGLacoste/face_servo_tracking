@@ -12,6 +12,9 @@ import multiprocessing as mp
 import cv2 as cv
 import numpy as np
 
+from PIL import Image, ImageTk #TODO should be in the image file /or class ?
+import tkinter as tk
+
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier
 from sklearn.pipeline import Pipeline
@@ -19,12 +22,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.metrics import classification_report
 
-
+from unidecode import unidecode  # To convert UTF-8 strings into ASCII. ex: 'françois' --> 'francois'
 import file as fl
 import util as u
 
 BLACK = (0,0,0)
-
+RED = (0,0,256)
 """  ====================== SFACE ======================================= 
 SFace : [Zhonyu2021] a state-of-the-art algorithm for face recognition
 Ref:
@@ -57,7 +60,7 @@ class FaceRecognition:
         # k-nearest-neighbors classifiers with learnable thresholds 
         self.kNNClfs = dict()  #  Dictionary of kNN classifiers with respect to various metrics
         self.kNNClf_thresholds = dict()
-        self.kNNClf_ratio_thresholds = dict()
+        self.kNNClf_ratioThresholds = dict()
         
         #  n_neighbors: to be determine via cross-validation
         # some possibily useful methods : get_params(), set_params()
@@ -67,7 +70,9 @@ class FaceRecognition:
                     
                     
     def putImgQueue(self, img):
-        # Put the face image in the queue for face recognition
+        """ Put the face image in the queue for face recognition. 
+        The image will show up in runFaceRecognitionTask()        
+        """
         self.inputQueue.put(img)
     
         
@@ -83,14 +88,10 @@ class FaceRecognition:
             #results =  [await self.recognizeFace(img) for img in faceImgs]
             results=list()
             for img in faceImgs:
-                # In case of method='isAMatch_positiveFraction,  certainty = 'positiveFraction'
-                # In case of method= ???
                 recognizedName, certainty = await self.recognizeFace(img)
-                # = result
-                results.append((recognizedName, certainty)) 
-            
-            
-            # Put the result in the result queue
+                results.append((img,recognizedName, certainty)) 
+          
+            # Put the result in the result queue: the result is sent to retrieveResults()
             await self.resultQueue.put(results) 
 
       
@@ -100,7 +101,6 @@ class FaceRecognition:
            The unrecognized face are identified by the user, and saved as {name}_{count+1}.jpeg 
            the new directory {name} 
         """
-        print("This is in retrieve_function ")
         while True:
             try:
                 print('Awaiting for result in retrieveResults')
@@ -108,16 +108,13 @@ class FaceRecognition:
                 print(f"Result received: {result}")
                 self.resultQueue.task_done()
                 
-                for name,img in result:
-                    if img is not None:
-                        if name == 'unknown': # i.e. unrecognized 
-                            actualName = self.askUserFaceID(self, img)
-                            if actualName is not None: 
-                                name = actualName 
-                                #   otherwise the name stays 'unknown'
-                                                                         
-                            fl.save_face_img(name,img)       
                 
+                for img, name,_ in result:
+                    if img is not None:
+                        #if name == 'stranger': # i.e. unrecognized 
+                        if name in ['francois', 'audrey', 'stranger']:
+                            self.createGUI_tkinter(img)
+
             except asyncio.CancelledError as e:
                 print('The task has been canceled, exit the loop')
                 break
@@ -301,7 +298,7 @@ class FaceRecognition:
                                                                         faceName)
     
         recognizedName = u.argmax_dict(positiveFraction)
-        print(f'The unknown face is more likely {recognizedName}')
+        print(f'The stranger face is more likely {recognizedName}')
         
         return (recognizedName, positiveFraction[recognizedName])
  
@@ -332,13 +329,21 @@ class FaceRecognition:
         """
         newFace_features = self.recognizer.feature(unknownFaceImg)
                
-        # Returns only the prediction of the best estimator    
+        # i.e. {metric : (faceName, predict_proba) for metric in [l2,cosine]}  
         predict_proba = { metric:  self.predict_kNNClf(newFace_features, metric ) 
                             for metric in ['l2', 'cosine']
                         } 
-        faceName = u.argmax_dict(predict_proba)        
+    
+        # faceName associated with the metric whose predictor has the best result      
         
-        return faceName, predict_proba[faceName]
+        faceNames_proba_list = list(predict_proba.values()) # [(faceName0, proba0), (faceName0, proba0)]
+        id_list = list(predict_proba.keys())
+        print(faceNames_proba_list)
+        # faceName such that proba is max in [(faceName_l2, proba_l2), (faceName_cos, proba_cos)]
+        faceName, prob_faceName = u.argmax_tupls(faceNames_proba_list )
+        
+        print(f'in recognizeFace: faceName={faceName} with prob={prob_faceName}')
+        return faceName, prob_faceName
         
     def trainKNNClfs(self,X, y):
         """  Trains k-nearest-neighbors classifiers
@@ -359,13 +364,13 @@ class FaceRecognition:
             threshold = np.quantile(correct_distances, quantile)
             return threshold
 
-        def find_probaRatio_threshold(X_val, y_val):
+        def find_probaRatioThreshold(X_val, y_val):
             """Returns the optimal threshold for the ratio between first ans second nearest classes. 
             
             The closer to 1 is the ratio, the lower is the classification signicance. i.e the actual
-            classification might be 'unknown'. 
+            classification might be 'stranger'. 
             """
-            threshold=2
+            threshold=1 
             return threshold 
         
         # Split data into training and validation sets
@@ -395,37 +400,41 @@ class FaceRecognition:
             
             # Get the threshold from validation data            
             #self.kNNClf_thresholds[metric] = find_dist_threshold( X_val, y_val)
-            self.kNNClf_ratio_thresholds[metric] = find_probaRatio_threshold( X_val, y_val)
+            self.kNNClf_ratioThresholds[metric] = find_probaRatioThreshold( X_val, y_val)
             
     
     # Predict function with threshold
-    def predict_kNNClf(self,  X, clf_metric ='l2'):
+    def predict_kNNClf(self,  X, metric ='l2'):
         """
         X: np.array(1,d) : feature embedding of the current face to classify 
 
         Returns : tupl: faceNames prediction, prediction index, prediction probability   
         
         """
-        model = self.kNNClfs[clf_metric] # pipeline
+        model = self.kNNClfs[metric] # pipeline
         #prediction = model.predict(X)  #   array (1,)  of int64
-        predict_probas = model.predict_proba(X) # array (1, Nlabels) of int64
-        
-        
-        print(list(enumerate(predict_probas)))
-        
-        predictions_sorted = sorted(enumerate(predict_probas),key=lambda x: x[1], reverse=True)
-        # [(0, array([0.21687483, 0.78312517]))]
-        print(predictions_sorted) # list of tuples ??
+        predict_probas = model.predict_proba(X)[0] # array (1, Nlabels) of int64  
+        predictions_sorted = sorted(enumerate(list(predict_probas)),
+                                    key=lambda x: x[1], 
+                                    reverse=True)
+      
+        #print(predictions_sorted) # list of tuples 
         
         if len(predictions_sorted) >1:
-            predict_ratio = predictions_sorted[0][1]/predictions_sorted[1][1] # >1 by definition,  
+            pred0 = predictions_sorted[0][1]
+            pred1 = predictions_sorted[1][1] + 0.001 # to avoid division by 0
+            predict_ratio = pred0/pred1 
         else: 
-            predict_ratio = 1
+            predict_ratio = 2
         predicted_index, pred_proba = predictions_sorted[0]
+
+        #print(predictions_sorted[0]  )                       
+        #print(predicted_index,  pred_proba)
+                
                 
         #s ad-hoc threshold :TODO to determine more systematically
-        if predict_ratio < self.kNNClf_ratio_thresholds:
-            return 'unknown', pred_proba   # The less the proba, the more likely it is to be 'unknown'
+        if predict_ratio < self.kNNClf_ratioThresholds[metric]:
+            return 'stranger', pred_proba   # The less the proba, the more likely it is to be 'stranger'
         
         return self.faceNames[predicted_index], pred_proba 
 
@@ -437,44 +446,112 @@ class FaceRecognition:
         
  
     # ==============================================================================================
-    def askUserFaceID(self, unknownFaceImg):
+        
+    def createGUI_tkinter(self,img):
         """  We ask the user to identify the unknow faces in the new image in unknows_new directory"""
         
-        title = 'Unidentified Human !!'
-        questionMsg = f"Please can you identify this stranger  ?"
-        answerMsg = f"The stranger name: "
-        self.questionUserAboutFaceImg(unknownFaceImg, title, questionMsg, answerMsg)
+        title = 'Stranger identification: (UGLY GUI )'   # title of the window
+        imgMsg = 'Unidentified !!'                       # Text on the image    
+        questionMsg = f"Please, identify this stranger ? (If you can't let it blank.)"
+        answerMsg = f"The stranger name is"
+
+        label_font = 'Arial 11'
         
-  
-    # TODO  should refactor this fct in a new class FaceImage    
-    def questionUserAboutFaceImg(self, faceImg, title, questionMsg, answerMsg):
-        """   return the user answer"""
-     
-        # Create a window
-        cv.namedWindow(title, cv.WINDOW_NORMAL)
+        # Create a Tkinter window
+        root = tk.Tk()
+        root.geometry("600x344")   
+        root.title(title)
 
-        # Create a function to handle the user's input
-        def handle_user_input(event, x, y, flags, param):
-            if event == cv.EVENT_LBUTTON:
-                user_input = input(questionMsg)
-                print(f"{answerMsg}: {user_input}")
-                cv.destroyWindow(title)
-
-        cv.setMouseCallback(title, handle_user_input)
-
-        while True:
-            cv.imshow(title, faceImg)
-            cv.putText(faceImg, questionMsg, (2,30), 
-                       cv.FONT_HERSHEY_SIMPLEX,0.5,BLACK,2)
+        def _return_face_name(user_input):
+            """ The face name is either the user input or 'stranger_{next_numero}"""
             
-            # Wait for a key press
-            key = cv.waitKey(1) & 0xFF
+            if user_input is not None and len(user_input)>0:
+                return unidecode(user_input.lower())  # convert UTF-8 (e.g: accents... ) in ASCII 
+            else:         
+                # We count how many kinds of 'stranger' directories are already there.     
+                countStrangers = len(fl.listStrangers())  
+                return f'stranger_{countStrangers}' 
 
-            # Press 'q' to exit the loop
-            if key == ord('q'):
-                break
 
+        def handle_user_input(faceImg    = img):
+            """  This function uses the following variables that are in its scope:
+            question_label, entry, entry_frame, message1_label, message2_label 
+            """
+            user_input = entry.get().strip()  
+            print(f"You entered: {user_input}")                
+                            
+            face_name = _return_face_name(user_input)            
+            question_label.pack_forget()  # Remove the question  
+            entry_frame.pack_forget()  # Remove the frame containing the entry and button
+            entry.unbind("<Return>")   # Unbind the Enter key (cannot trigger an event again)
+                                 
+            msg1 = f"Hi, we call you \'{face_name}\'."
+            msg2 = f"From now, I will do my best to recognize the face of {face_name}." 
+            message1_label.config(text=msg1)                
+            message2_label.config(text=msg2)
+
+            # We save the face image in the directory named face_name (which is created if needed)        
+            fl.saveNewFaceImg(face_name,faceImg)
+                                     
         
+        def on_enter(event):
+            """Pressing 'Enter' has the same effect than pressing the button
+            
+            Rem:  The event variable is automatically passed by Tkinter 
+                    when the <Return> key event occurs. 
+            """
+            handle_user_input()    
+        
+        def prepareImgTk(img):
+            """  Prepares the face image to be shown in the TK identification GUI. 
+            Does not modify the original image, only a local copy  
+            """
+            img = img.copy()
+            # Put some text on a copy of the image:
+            cv.putText(img, imgMsg, (2,30), 
+                        cv.FONT_HERSHEY_SIMPLEX, 0.8, RED, 2)
+                
+            # Convert the image into the Tkinter format 
+            img = cv.cvtColor(img, cv.COLOR_BGR2RGB)    # Convert to RGB
+            img_pil = Image.fromarray(img)              # convert to pil format
+            img_tk = ImageTk.PhotoImage(img_pil)        # Convert to Tkinter format
+            return img_tk
+        
+        # Create a label and display the image
+        img_tk = prepareImgTk(img)
+        label = tk.Label(root, image=img_tk)
+        label.pack()
+
+        # Create a label for the question
+        question_label = tk.Label(root, text=questionMsg, font = label_font)
+        question_label.pack( pady=5)
+
+        # Create a frame for the entry widget and the button
+        entry_frame = tk.Frame(root)
+        entry_frame.pack()
+
+        # Create an entry widget to capture user input
+        entry = tk.Entry(entry_frame)
+        entry.pack(side=tk.LEFT )  
+
+        # Create a submit button
+        submit_button = tk.Button(entry_frame, text="Done", command=handle_user_input)
+        submit_button.pack(side=tk.LEFT, padx=5)
+
+        # Pressing the button change these message labels
+        message1_label = tk.Label(root, text="", font = label_font)
+        message1_label.pack()
+        message2_label = tk.Label(root, text="", font = label_font)
+        message2_label.pack()
+
+        # Bind the Enter key to the handle_user_input function
+        entry.bind("<Return>", on_enter)
+
+        # Tkinter event loop
+        root.mainloop()
+
+    
+       
             
     ## =========  tests   ==========================================
     async def test_runTask(self):
@@ -485,7 +562,7 @@ class FaceRecognition:
                                                                     self.inputQueue.get)
             await asyncio.sleep(0.1)  # simulate processing time
         
-            result = 'unknown' # faceImg
+            result = 'stranger' # faceImg
             print(f"Task is done: result: {result}")
             await self.resultQueue.put(result) 
 
