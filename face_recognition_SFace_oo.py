@@ -6,14 +6,14 @@ face_recognition.py
 import os 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+import queue as qu
 import multiprocessing as mp
-
 
 import cv2 as cv
 import numpy as np
 
-from PIL import Image, ImageTk #TODO should be in the image file /or class ?
-import tkinter as tk
+#from PIL import Image, ImageTk #TODO should be in the image file /or class ?
+#import tkinter as tk
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier
@@ -22,12 +22,10 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.metrics import classification_report
 
-from unidecode import unidecode  # To convert UTF-8 strings into ASCII. ex: 'françois' --> 'francois'
 import file as fl
 import util as u
+import new_face_gui_tk as gui
 
-BLACK = (0,0,0)
-RED = (0,0,256)
 """  ====================== SFACE ======================================= 
 SFace : [Zhonyu2021] a state-of-the-art algorithm for face recognition
 Ref:
@@ -44,6 +42,9 @@ class FaceRecognition:
         self.faceNames = self.setFaceNames(faceNames2check) # face names we want to recognize
          
         self.inputQueue = mp.Queue()       # Queue for moving face images to the face recognition task
+        # WARNING ***  multiprocessing queue are slow (image are large objects that needed to be serialized)
+        # https://www.mindee.com/blog/why-are-multiprocessing-queues-slow-when-sharing-large-objects-in-python
+        
         self.resultQueue = asyncio.Queue() # Queue for capturing the recognition results (i.e. face names)
         self.executor = ThreadPoolExecutor(max_workers=2) # Thread pool for the face recognition task        
         
@@ -52,9 +53,8 @@ class FaceRecognition:
                             "" )
         
         self.faceEmbeddingsDict =dict()  
-        #self.X = None    # (X,y)  : dataset to be loaded, based on faceEmbeddingsDict 
-        #self.y = None
-        
+       
+        # ------------   Classifiers to apply to the face embeddings -------------------- 
         self.LogisticRegressionClf = LogisticRegression(random_state=0)
         
         # k-nearest-neighbors classifiers with learnable thresholds 
@@ -67,25 +67,28 @@ class FaceRecognition:
         #                                 kneighbors()  : find the k neighbors and their distances  
         #                                 predict(), predict_proba(X)      
         # scikit-learn.org/stable/modules/generated/sklearn.neighbors.NearestNeighbors.html
-                    
-                    
+        
+        
+        # ------------------                             -----------------------------------
+        self.newFaceIdThread = ThreadPoolExecutor(max_workers=1) # Thread for running newFaceId ********
+        # Queue for moving a new face identity (faceName) from  newFaceIdGUI
+        self.newFaceIdQueue = qu.Queue() 
+        self.newFaceIdGUI = None # Only created when required for new face identification
+        
     def putImgQueue(self, img):
         """ Put the face image in the queue for face recognition. 
         The image will show up in runFaceRecognitionTask()        
         """
         self.inputQueue.put(img)
-    
-        
+      
     async def runFaceRecognitionTask(self):
         print('we arrive in runFaceRecognitionTask')
         while True:
             # Receive a face image from the face detection loop
             print('We are awaiting for the last face image that has been detected.')
-            
             faceImgs = await asyncio.get_event_loop().run_in_executor(self.executor,self.inputQueue.get)
             print('We got a new face image for the face recognition task to process.')
                 
-            #results =  [await self.recognizeFace(img) for img in faceImgs]
             results=list()
             for img in faceImgs:
                 recognizedName, certainty = await self.recognizeFace(img)
@@ -93,7 +96,6 @@ class FaceRecognition:
           
             # Put the result in the result queue: the result is sent to retrieveResults()
             await self.resultQueue.put(results) 
-
       
     async def retrieveResults(self):
         """ Retrieves results from face recognition of the face images 
@@ -105,16 +107,17 @@ class FaceRecognition:
             try:
                 print('Awaiting for result in retrieveResults')
                 result = await self.resultQueue.get()
-                print(f"Result received: {result}")
+                print(f"Result received")
                 self.resultQueue.task_done()
-                
-                
+                           
                 for img, name,_ in result:
                     if img is not None:
-                        #if name == 'stranger': # i.e. unrecognized 
-                        if name in ['francois', 'audrey', 'stranger']:
-                            self.createGUI_tkinter(img)
-
+                        if name == 'unrecognized': 
+                            # Ask the user to id the new face 
+                            # The answer is sent to retrieveNewFaceId to be processed
+                            gui.createGUI_tk(img, self.newFaceIdQueue) 
+                            # TODO: convert the GUI into an object
+                        
             except asyncio.CancelledError as e:
                 print('The task has been canceled, exit the loop')
                 break
@@ -124,7 +127,33 @@ class FaceRecognition:
                 # Notify the queue that the task is done
                 self.resultQueue.task_done()
 
+    async def retrieveNewFaceId(self):
+        # TODO  **********           ********************
+        #newFaceId = await self.newFaceIdQueue.get()  # for an async queue
+        while True:
+    
+            print('We are awaiting for the new face id.') # for an non-async queue sending data to newFaceIdThread
+            newFaceId = await asyncio.get_event_loop().run_in_executor(self.newFaceIdThread,
+                                                                    self.newFaceIdQueue.get)
+            faceName, faceImg = newFaceId
+            print(f'We got {faceName}   to process.')
+            print(type(faceImg))
 
+            # The image is saved in the directory 'name' (which is created if needed)        
+            fl.saveNewFaceImg(faceName, faceImg )
+        
+            # Update face embeddings for the new face name
+            self.updateFaceEmbedding(faceName, faceImg)
+ 
+            # Re-train the kNN classifier with the updated data
+            
+            # (?)TODO  For now it is silly: we simply convert all face embeddings again ! 
+            # (but I think it is fast enough to justify avoiding the complications... )    
+            X, y = self.convertFaceEmbeddingsInArrays()
+            self.trainKNNClfs(X, y)
+            print(f'We just retrained the kNN layer to (hopefully) recognize {faceName}.')
+
+            
     def embeddingsAreSaved(self):
         """ 
         Returns a Boolean value: True when we find a file that contains the SFace features embeddings 
@@ -164,7 +193,7 @@ class FaceRecognition:
         
         # Compute or load the knn classifier (self.kNNClfs[metric] )   
         if not self.kNNClfsAreTrained():    
-            X, y = self.convertDatasetInArrays()
+            X, y = self.convertFaceEmbeddingsInArrays()
             self.trainKNNClfs(X, y)
         else: 
             self.loadkNNClfs()  
@@ -203,20 +232,32 @@ class FaceRecognition:
         else:
             print('Face recognition is inactive: no embedding computed.')
             
-                    
-    def updateFaceEmbeddings(self): # TODO  
-        """  Updates face embeddings with the new face images that have just been 
-        identified by the users. 
+                
+    def updateFaceEmbedding(self, faceName, faceImg): 
+        """  Updates face embeddings with the last new face image that have just been 
+        identified by the user. 
         
-        It can be new images with new names (in a new directory of the same name)
-        or 
-        can be new images associated with known names. 
         """
-        # TODO
-        filenames = ''
-        self.computeFaceEmbeddings(filenames)
+        # In case we never met 'faceName' before:
+        if faceName not in self.faceEmbeddingsDict.keys(): 
+            self.faceEmbeddingsDict[faceName] =list()
+        
+        # Compute the feature embedding of the new face image
+        embedding = self.recognizer.feature(faceImg)   # (1,128)  
+        self.faceEmbeddingsDict[faceName].append(embedding)
+        print('We just compute the face embeddings of the new {faceName} image.')
+            
     
-    def convertDatasetInArrays(self):
+    
+    def convertFaceEmbeddingInArrays_1faceName(self, n, faceName):
+        """  Convert the faceEmbeddings in arrays for a given faceName associated to index n"""
+        X_n = np.array(self.faceEmbeddingsDict[faceName])  # array(Nn, 128)  where Nn = #{images}
+        lenght = X_n.shape[0]
+        X_n = X_n.reshape(lenght,128)
+        y_n = (np.array([n]*lenght)).reshape(lenght,)      # array(Nn, )
+        return X_n, y_n
+    
+    def convertFaceEmbeddingsInArrays(self):
         """   
         Face Embeddings is a dictionary of list of image feature embeddings: 
                             {'audrey': [img_embed1, img_embed2, ...], 'francois':[...]}
@@ -224,18 +265,14 @@ class FaceRecognition:
             
         But sci-kit-learn methods expect the dataset to be in np.arrays
         i.e. 
-        X : np.array(n, d)   : data points
+        X : np.array(n, d)   : data points (i.e.faceEmbeddings) for a given label (i.e. face name)
         y : np.array(1,n)    : array of label indices ( i.e. each index represents a face name)
         """
-        
         for n, faceName in enumerate(self.faceEmbeddingsDict.keys()):
             #embed_list = self.faceEmbeddingsDict[faceName] # list of array(1,128)
-            #y = n*len(embed_list)
-            
-            X_n = np.array(self.faceEmbeddingsDict[faceName])  # array(Nn, 128)
-            lenght = X_n.shape[0]
-            y_n = (np.array([n]*lenght)).reshape(lenght,)     # array(Nn, )
-            
+            #y_n = n*len(embed_list)
+            X_n, y_n = self.convertFaceEmbeddingInArrays_1faceName(n, faceName)
+    
             # Stack the arrays X <--- [ X|X_n ]
             if n == 0:
                 X = X_n
@@ -246,7 +283,7 @@ class FaceRecognition:
         return X,y
     
     
-    # ================================   A first naive match criterion =========================================    
+    '''# ================================   A first naive match criterion =========================================    
     def _computel2Scores(self, newFace_features, faceName, l2_similarity_threshold = 1.128):
         l2Scores = list()
         for face_features in self.faceEmbeddingsDict[faceName]:
@@ -302,7 +339,8 @@ class FaceRecognition:
         
         return (recognizedName, positiveFraction[recognizedName])
  
-
+    '''
+    
     # ============ Logistic regression classifier to apply over the SFace features embeddings===========
     # TODO   
     async def recognizeFace_LogisticRegression(self, unknownFaceImg):
@@ -323,11 +361,11 @@ class FaceRecognition:
     # ========   k-nearest-neighbors classifiers to apply over the SFace features embeddings =====
     
         
-    async def recognizeFace(self, unknownFaceImg):
+    async def recognizeFace(self, newFaceImg):
         """ 
-        Returns tuple (predictedFaceName, predictionCertainty)
+        Returns tuple (predicted_faceName, prediction_probability)
         """
-        newFace_features = self.recognizer.feature(unknownFaceImg)
+        newFace_features = self.recognizer.feature(newFaceImg)
                
         # i.e. {metric : (faceName, predict_proba) for metric in [l2,cosine]}  
         predict_proba = { metric:  self.predict_kNNClf(newFace_features, metric ) 
@@ -337,13 +375,13 @@ class FaceRecognition:
         # faceName associated with the metric whose predictor has the best result      
         
         faceNames_proba_list = list(predict_proba.values()) # [(faceName0, proba0), (faceName0, proba0)]
-        id_list = list(predict_proba.keys())
         print(faceNames_proba_list)
-        # faceName such that proba is max in [(faceName_l2, proba_l2), (faceName_cos, proba_cos)]
-        faceName, prob_faceName = u.argmax_tupls(faceNames_proba_list )
         
-        print(f'in recognizeFace: faceName={faceName} with prob={prob_faceName}')
-        return faceName, prob_faceName
+        # faceName such that proba is max in [(faceName_l2, proba_l2), (faceName_cos, proba_cos)]
+        faceName, faceName_prob = u.argmax_tupls(faceNames_proba_list )
+        
+        print(f'We recognize the face of {faceName} with prob={faceName_prob}')
+        return faceName, faceName_prob
         
     def trainKNNClfs(self,X, y):
         """  Trains k-nearest-neighbors classifiers
@@ -445,113 +483,6 @@ class FaceRecognition:
     
         
  
-    # ==============================================================================================
-        
-    def createGUI_tkinter(self,img):
-        """  We ask the user to identify the unknow faces in the new image in unknows_new directory"""
-        
-        title = 'Stranger identification: (UGLY GUI )'   # title of the window
-        imgMsg = 'Unidentified !!'                       # Text on the image    
-        questionMsg = f"Please, identify this stranger ? (If you can't let it blank.)"
-        answerMsg = f"The stranger name is"
-
-        label_font = 'Arial 11'
-        
-        # Create a Tkinter window
-        root = tk.Tk()
-        root.geometry("600x344")   
-        root.title(title)
-
-        def _return_face_name(user_input):
-            """ The face name is either the user input or 'stranger_{next_numero}"""
-            
-            if user_input is not None and len(user_input)>0:
-                return unidecode(user_input.lower())  # convert UTF-8 (e.g: accents... ) in ASCII 
-            else:         
-                # We count how many kinds of 'stranger' directories are already there.     
-                countStrangers = len(fl.listStrangers())  
-                return f'stranger_{countStrangers}' 
-
-
-        def handle_user_input(faceImg    = img):
-            """  This function uses the following variables that are in its scope:
-            question_label, entry, entry_frame, message1_label, message2_label 
-            """
-            user_input = entry.get().strip()  
-            print(f"You entered: {user_input}")                
-                            
-            face_name = _return_face_name(user_input)            
-            question_label.pack_forget()  # Remove the question  
-            entry_frame.pack_forget()  # Remove the frame containing the entry and button
-            entry.unbind("<Return>")   # Unbind the Enter key (cannot trigger an event again)
-                                 
-            msg1 = f"Hi, we call you \'{face_name}\'."
-            msg2 = f"From now, I will do my best to recognize the face of {face_name}." 
-            message1_label.config(text=msg1)                
-            message2_label.config(text=msg2)
-
-            # We save the face image in the directory named face_name (which is created if needed)        
-            fl.saveNewFaceImg(face_name,faceImg)
-                                     
-        
-        def on_enter(event):
-            """Pressing 'Enter' has the same effect than pressing the button
-            
-            Rem:  The event variable is automatically passed by Tkinter 
-                    when the <Return> key event occurs. 
-            """
-            handle_user_input()    
-        
-        def prepareImgTk(img):
-            """  Prepares the face image to be shown in the TK identification GUI. 
-            Does not modify the original image, only a local copy  
-            """
-            img = img.copy()
-            # Put some text on a copy of the image:
-            cv.putText(img, imgMsg, (2,30), 
-                        cv.FONT_HERSHEY_SIMPLEX, 0.8, RED, 2)
-                
-            # Convert the image into the Tkinter format 
-            img = cv.cvtColor(img, cv.COLOR_BGR2RGB)    # Convert to RGB
-            img_pil = Image.fromarray(img)              # convert to pil format
-            img_tk = ImageTk.PhotoImage(img_pil)        # Convert to Tkinter format
-            return img_tk
-        
-        # Create a label and display the image
-        img_tk = prepareImgTk(img)
-        label = tk.Label(root, image=img_tk)
-        label.pack()
-
-        # Create a label for the question
-        question_label = tk.Label(root, text=questionMsg, font = label_font)
-        question_label.pack( pady=5)
-
-        # Create a frame for the entry widget and the button
-        entry_frame = tk.Frame(root)
-        entry_frame.pack()
-
-        # Create an entry widget to capture user input
-        entry = tk.Entry(entry_frame)
-        entry.pack(side=tk.LEFT )  
-
-        # Create a submit button
-        submit_button = tk.Button(entry_frame, text="Done", command=handle_user_input)
-        submit_button.pack(side=tk.LEFT, padx=5)
-
-        # Pressing the button change these message labels
-        message1_label = tk.Label(root, text="", font = label_font)
-        message1_label.pack()
-        message2_label = tk.Label(root, text="", font = label_font)
-        message2_label.pack()
-
-        # Bind the Enter key to the handle_user_input function
-        entry.bind("<Return>", on_enter)
-
-        # Tkinter event loop
-        root.mainloop()
-
-    
-       
             
     ## =========  tests   ==========================================
     async def test_runTask(self):
