@@ -364,6 +364,9 @@ class FaceRecognition:
     async def recognizeFace(self, newFaceImg):
         """ 
         Returns tuple (predicted_faceName, prediction_probability)
+        
+        We compute it as the faceName associated with the metric whose predictor 
+        has the best predicted_proba      
         """
         newFace_features = self.recognizer.feature(newFaceImg)
                
@@ -372,8 +375,6 @@ class FaceRecognition:
                             for metric in ['l2', 'cosine']
                         } 
     
-        # faceName associated with the metric whose predictor has the best result      
-        
         faceNames_proba_list = list(predict_proba.values()) # [(faceName0, proba0), (faceName0, proba0)]
         print(faceNames_proba_list)
         
