@@ -1,4 +1,5 @@
 
+import queue
 
 import cv2 as cv
 from PIL import Image, ImageTk 
@@ -10,7 +11,7 @@ import file as fl
 BLACK = (0,0,0)
 RED = (0,0,256)
     
-def createGUI_tk(self,img):
+def createGUI_tk(img, newFaceIdQueue: queue.Queue):
     """  We ask the user to identify the unknow faces in the new image in unknows_new directory"""
     
     title = 'Stranger identification: (UGLY GUI )'   # title of the window
@@ -24,7 +25,10 @@ def createGUI_tk(self,img):
     root = tk.Tk()   
     root.geometry("600x344")   
     root.title(title)
-
+    
+    def close_window():
+        root.destroy()
+    
     def _return_face_name(user_input):
         """ The face name is either the user input or 'stranger_{next_numero}"""
         
@@ -52,12 +56,16 @@ def createGUI_tk(self,img):
         msg2 = f"From now, I will do my best to recognize the face of {faceName}." 
         message1_label.config(text=msg1)                
         message2_label.config(text=msg2)
-
+        
         # We save the face image in the directory named faceName (which is created if needed)        
-        fl.saveNewFaceImg(faceName,faceImg)
+        #fl.saveNewFaceImg(faceName,faceImg)
         print('Still in createGUI_tk()')     
-                                
-    
+       
+        newFaceIdQueue.put((faceName,faceImg))  #           
+        
+        close_button = tk.Button(root, text="Close", command=close_window)
+        close_button.pack(pady=5)
+        
     def on_enter(event):
         """Pressing 'Enter' has the same effect than pressing the button
         
@@ -81,9 +89,7 @@ def createGUI_tk(self,img):
         img_tk = ImageTk.PhotoImage(img_pil)        # Convert to Tkinter format
         return img_tk
     
-    def destroyGUI():
-        NotImplemented
-        
+       
     # Create a label and display the image
     img_tk = prepareImgTk(img)
     label = tk.Label(root, image=img_tk)
@@ -102,7 +108,7 @@ def createGUI_tk(self,img):
     entry.pack(side=tk.LEFT )  
 
     # Create a submit button
-    submit_button = tk.Button(entry_frame, text="Done", command=handle_user_input)
+    submit_button = tk.Button(entry_frame, text="Enter", command=handle_user_input)
     submit_button.pack(side=tk.LEFT, padx=5)
 
     # Pressing the button change these message labels
@@ -117,5 +123,10 @@ def createGUI_tk(self,img):
     # Tkinter event loop
     root.mainloop()
 
-
     
+def testQueue(myQueue: queue.Queue):
+    print('Still in createGUI_tk()')     
+    print(type(myQueue))
+    #await self.newFaceIdQueue.put(faceName) 
+    myQueue.put(('name', 432) )  #   OK    *******************          
+    print(myQueue)    
