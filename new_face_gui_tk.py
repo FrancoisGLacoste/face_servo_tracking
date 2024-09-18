@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 
 import queue
 
@@ -6,11 +7,12 @@ from PIL import Image, ImageTk
 import tkinter as tk
 from unidecode import unidecode  # To convert UTF-8 strings into ASCII. ex: 'françois' --> 'francois'
 
-import file as fl
+import file_management as fl
 
 BLACK = (0,0,0)
 RED = (0,0,256)
     
+# TODO  Convert it into a GUI class    
 def createGUI_tk(img, newFaceIdQueue: queue.Queue):
     """  We ask the user to identify the unknow faces in the new image in unknows_new directory"""
     
@@ -53,17 +55,16 @@ def createGUI_tk(img, newFaceIdQueue: queue.Queue):
         entry.unbind("<Return>")   # Unbind the Enter key (cannot trigger an event again)
                                 
         msg1 = f"Hi, we call you \'{faceName}\'."
-        msg2 = f"From now, I will do my best to recognize the face of {faceName}." 
+        msg2 = f"In few seconds (?minutes?), we should recognize {faceName}." 
         message1_label.config(text=msg1)                
         message2_label.config(text=msg2)
         
         # We save the face image in the directory named faceName (which is created if needed)        
-        #fl.saveNewFaceImg(faceName,faceImg)
         print('Still in createGUI_tk()')     
        
         newFaceIdQueue.put((faceName,faceImg))  #           
         
-        close_button = tk.Button(root, text="Close", command=close_window)
+        close_button = tk.Button(root, text="Close this window", command=close_window)
         close_button.pack(pady=5)
         
     def on_enter(event):
@@ -123,10 +124,3 @@ def createGUI_tk(img, newFaceIdQueue: queue.Queue):
     # Tkinter event loop
     root.mainloop()
 
-    
-def testQueue(myQueue: queue.Queue):
-    print('Still in createGUI_tk()')     
-    print(type(myQueue))
-    #await self.newFaceIdQueue.put(faceName) 
-    myQueue.put(('name', 432) )  #   OK    *******************          
-    print(myQueue)    

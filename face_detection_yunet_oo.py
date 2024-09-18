@@ -5,15 +5,8 @@ import cv2 as cv
 
 import os,sys,time
 
-import file as fl 
-
-GREEN = (10,255,0)
-BLUE = (255,0,0)
-RED =  (0,0,255) 
-YELLOW = (50,200,200)
-MAGENTA=(255, 0, 255)
-CYAN = (255,255,0)
-BLACK = (0,0,0)
+from file_management import YUNET_DETECTION_PATH
+import file_management as fl
 
 class FaceDetection():
     algoName = 'yunet' 
@@ -27,8 +20,7 @@ class FaceDetection():
         self.nms_threshold  = nms_threshold
         self.top_k = top_k
         
-        self.modelPath = os.path.join(fl.BASE_DIR, 
-                            'face_detection_yunet_2023mar.onnx')
+        self.modelPath = YUNET_DETECTION_PATH
         
         self.detector =  self._createFaceDetector_yunet()
         
@@ -40,9 +32,7 @@ class FaceDetection():
         
         self.faces =[]        # list of detected face boxes   
 
-    def setModelPath(self, newModelFile):
-        self.modelPath = os.path.join(fl.BASE_DIR, newModelFile )
-        
+       
     def _createFaceDetector_yunet(self):
         """ 
         .
@@ -155,73 +145,8 @@ class FaceDetection():
         return None
             
 
-    def visualizeDetection(self, img, faceArray,faceCenter, select_id, tm,verbose=False ):
         
-        """
-        We show the face center only for the selected face (select_id). 
-        The selected face is emphasized: it is the one that is tracked by the servos
-        
-        """
-        fps =  tm.getFPS()  # apriori not the same as cv.CAP_PROP_FPS
-        detectTime = tm.getTimeMilli()
-        #avgDetectTime = tm.getAvgTimeMilli()  # when tm is not reset 
-
-        thickness=2 
-        selectFace_thick = 4
-        selectFace_color = GREEN
-
-        if faceArray is not None: 
-            x_center, y_center = faceCenter
-            
-            faceNb = np.size(faceArray,0) 
-            if verbose:
-                print(f'I am seeing {faceNb} face(s) !')
-        
-            for idx, face in enumerate(faceArray):
-                score = face[-1]
-                coords = face[:-1].astype(np.int32)              
-                x,y,w,h,x_eye1,y_eye1,x_eye2,y_eye2,x_nose,y_nose,x_mouth1,y_mouth1,x_mouth2,y_mouth2 = coords
-                message = '''Face {}: nose = ({:.0f}, {:.0f}),
-                            eye1 = ({:.0f}, {:.0f}),eye2 = ({:.0f}, {:.0f}), 
-                            surface = {:.0f}, score = {:.2f}'''                     
-                if verbose:
-                    print(message.format(idx,x_nose, y_nose,x_eye1,y_eye1,x_eye2,y_eye2, w*h, score))
-                
-                boxColor = BLACK
-                boxThickness = thickness
-                captionText ='.'
-                
-                # Specific to the selected face
-                if idx == select_id: 
-                    # The face center is displayed only for the selected face
-                    captionText = ', center = ({:.0f}, {:.0f}).'.format(x_center, y_center)
-                    cv.circle(img, (x_center, y_center), 4, selectFace_color, selectFace_thick)
-                    boxThickness = selectFace_thick
-                    boxColor = selectFace_color
-                
-                cv.rectangle(img, (x, y), (x+w, y+h),boxColor, boxThickness)
-                cv.circle(img, (x_eye1,y_eye1), 2, RED, thickness)
-                cv.circle(img, (x_eye2,y_eye2), 2, BLUE, thickness)
-                cv.circle(img, (x_nose,y_nose), 2, CYAN, thickness)
-                cv.circle(img, (x_mouth1,y_mouth1), 2, MAGENTA, thickness)
-                cv.circle(img, (x_mouth2,y_mouth2), 2, YELLOW, thickness)            
-                try:
-                    cv.putText(img,
-                            ('Face {}: surface = {:.0f}, score = {:.2f}'
-                                .format(idx, w*h, score) + captionText),
-                            (1, 15*(2+idx)), 
-                            cv.FONT_HERSHEY_SIMPLEX, 
-                            0.5, boxColor, 2)
-                except Exception as e: 
-                    print(' Visualization of face detection has met an error...') 
-                    print(e)      
-         
-        # show the image even when no face is detected               
-        cv.putText(img, 'Frames per second: {:.2f}; Detection time: {:.2f} ms'.format(
-            fps, detectTime), (1, 16), cv.FONT_HERSHEY_SIMPLEX, 0.5, BLACK, 2) 
-        return img
-    
-        
+    # TODO ***** ??    
     def increaseBox(self,box):  
         # Because when detecting in image we must adjust the scaling for each image
         x, y, w, h = box 

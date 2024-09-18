@@ -1,27 +1,20 @@
 # -*- encoding: utf-8 -*-
+
+
+import time, sys
  
 import numpy as np
 import cv2 as cv
 
-import sys, os, time
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
-import multiprocessing as mp
-
-import file as fl            # Custom module for file management 
-#import face_detection_yunet as dtc # Custom module for face detection using yunet
+import file_management as fl    # Custom module for file management 
 import visual_tracking_oo as vt # Custom module for tracking using vittrack
 import filtering as filt     # Custom module for filtering of face center trajectory (Kalman filter)
 import uart                  # Custom module using pyserial for serial communication
-#import face_recognition_SFace_PAS_FINI as recog  # custom module for face recognition 
 
-
+import visualization as v    
 from face_detection_yunet_oo import FaceDetection 
 from visual_tracking_oo import FaceTracking
 from face_recognition_SFace_oo import FaceRecognition
-
-
-
 
 
 def weSwitch2Tracking(faces, modeTime, ifSwitch = True):
@@ -43,7 +36,7 @@ def weSwitch2Tracking(faces, modeTime, ifSwitch = True):
     return True 
   
 # ===================================================================             
-def face_servo_tracking(faceRecognition):   
+def face_servo_tracking(faceRecognition : FaceRecognition):   
     ifSwitch2Tracking = True # False: stay only in detection mode
     ifVisualize = True 
     ifSendData = False
@@ -90,8 +83,8 @@ def face_servo_tracking(faceRecognition):
         
         # Tap any key to exit the loop    
         if cv.waitKey(1) > 0:
+            print('Exit the camera loop')
             break
-        
         
         if mode == 'faceDetection': 
             
@@ -99,15 +92,11 @@ def face_servo_tracking(faceRecognition):
             tm.start()
             isSuccesful, faces = faceDetector.detect(img) 
             tm.stop()
-            
-            #print(faces.shape)
-            
+
             # Rem: isSuccesful can be true even when faces is None
-            if not isSuccesful:
+            if not isSuccesful or faces is None:
                 continue
 
-            if faces is None: 
-                continue
                     
             if faceRecognition.isActive:
                 print('Sending image to face recognition module.')
@@ -116,7 +105,7 @@ def face_servo_tracking(faceRecognition):
                 # TODO:  devrais mettre cette fct dans une classe ??
                 face_imgs = fl.cropBoxes(img, faces[:,:4])   #recognizer.align() ?
 
-                # Put the face image in the queue for face recognition
+                # Put the face image in a (non-async) queue for face recognition
                 faceRecognition.putImgQueue(face_imgs)
            
           
@@ -135,12 +124,11 @@ def face_servo_tracking(faceRecognition):
             #smoothCenter = filt.smoothCoord(observedCenter)
             smoothCenter = observedCenter
             
-            if ifVisualize:    # TODO image class
-                # Rem: output img can be written into a video (videoWrite) 
-                img = faceDetection.visualizeDetection(img, faces, smoothCenter,select_idx, tm)
-                img = filt.visualizeTraject(img, faceCenterTraject)
-                cv.imshow('Video', img)
-            
+            if ifVisualize:   
+                # TODO: re-organize the visualization modules AND the trajectory filtering modules
+                v.visualizeTraject_inDetection(faceDetection,
+                                               img, faces, smoothCenter,select_idx, tm, 
+                                               faceCenterTraject  )
            
             if  weSwitch2Tracking(faces, time.time() - modeStartTime, ifSwitch2Tracking) : 
                 assert faces is not None
@@ -176,7 +164,7 @@ def face_servo_tracking(faceRecognition):
             score = faceTracker.getTrackingScore()
             tm.stop()
             
-            if not isLocated or (score < 0.5):
+            if not isLocated or (score < 0.5):      
                 # Switch back to face detection mode
                 print(f'''Target is lost: go back to face detection after 
                       spending {modeStartTime - time.time()} s in face tracking mode.''')
@@ -190,7 +178,6 @@ def face_servo_tracking(faceRecognition):
             faceCenterTraject.append(observedCenter) #i.e. measurements.append(...)
             observedTrajectTime.append(time.time())
  
-            #print(observedCenter)
             #print(observedCenter.shape)  #(2,1)
             
             #Kalman Filtering is used to smooth the observed trajectory of face centers
@@ -198,19 +185,9 @@ def face_servo_tracking(faceRecognition):
                                                    filteredTraject)
             smoothCenter = filteredTraject[-1] 
 
-            #print(smoothCenter.shape) # (4,1)
-            #print(type(faceCenterTraject))
-            #print(type(faceCenterTraject[0].shape))  # (2,1)
-            
-
             if ifVisualize:
-                GREEN = (10,255,0)
-                BLUE = (255,0,0)
-                img = vt.visualizeTracking(img, faceTuple, smoothCenter[:2], score, tm)
-                img = filt.visualizeTraject(img, faceCenterTraject, GREEN)
-                img = filt.visualizeTraject(img, filteredTraject, BLUE)
-                cv.imshow('Video', img)
-                
+                v.visualizeTraject_inTracking( img,faceTuple, smoothCenter,select_idx, tm, 
+                                                faceCenterTraject, filteredTraject)    
                 if ifSaveVideo:
                     fl.saveVideo(video) #TODO  VOIR SI CA MARCHE
                     continue 
@@ -220,7 +197,8 @@ def face_servo_tracking(faceRecognition):
             if time.time() - modeStartTime > acquisitionTime:
                 # Signal acquisition for state model estimation
           
-                filt.saveTraject(faceCenterTraject, observedTrajectTime, mode)
+                # TODO:  pass an object Trajectory as argument
+                fl.saveTraject(faceCenterTraject, observedTrajectTime, mode)
                 # Reset the face center trajectory
                 faceCenterTraject   = [] # Non-filtered observations
                 observedTrajectTime = [] # 
@@ -231,32 +209,13 @@ def face_servo_tracking(faceRecognition):
            
     cv.destroyAllWindows()
             
-async def main():   
-    
-    # Create a FaceRecognition object, including input/result queues
-    faceRecognition = FaceRecognition(isActive = True) 
-    faceRecognition.prepareFaceRecognition() # compute features, train the kNN classifier, save that.
-       
-    # Create the (CPU-bound) process for the servo-tracking of faces
-    camera_process = mp.Process(target=face_servo_tracking, 
-                           args=(faceRecognition,) )
-    camera_process.start()
-     
-    # During the face servo-tracking, face recognition is performed on a separate thread pool
-    await asyncio.gather(
-            faceRecognition.runFaceRecognitionTask(),
-            faceRecognition.retrieveResults()  # and results are retrieved 
-            )
-    
-    camera_process.join()
-    
-    
-# ========================  Test 1 ======================================
+
+# ========================  Test ============ ======================================
 def test_face_servo_tracking_1(faceRecognition):
     while True:
         # e.g.  Face Detection
-        mp.Event().wait(0.1)  #  delay    
-        newData = np.random.randint(0, 100)
+        #  Compute something silly for the pure sake of wasting time (i.e. to delay...)     
+        newData = np.mean(np.random.randint(0, 1000))
         print(f'Put {newData} in  inputQueue')
         faceRecognition.putImgQueue(newData)
 
@@ -269,27 +228,4 @@ async def test_retrieve_results_1(resultQueue):
         print(f"Result received: {result}")
         resultQueue.task_done()
 
-async def test_main_async_process():
-    """ Test 1 
-        To test the asyncio/process/threads structure
-        Without doing anything but passing numbers as data
-    test_face_servo_tracking_1 <----- face_servo_tracking  
-    test_retrieve_results_1    <----- retrieve_results
-    faceRecognition.test_runTask 
-    """
-    faceRecognition = FaceRecognition() 
-    camera_process = mp.Process(target=test_face_servo_tracking_1, 
-                           args=(faceRecognition,))
-    camera_process.start()
-    await asyncio.gather(
-            faceRecognition.test_runTask(),
-            test_retrieve_results_1(faceRecognition.resultQueue)       
-            )
-    
-    camera_process.join()    
-         
-if __name__ == '__main__':
-    #asyncio.run(test_main_async_process())
- 
-    asyncio.run(main())
-    
+   
