@@ -5,34 +5,11 @@ filtering.py
 import numpy as np
 import cv2 as cv
 import json
-import matplotlib.pyplot as plt
 
-GREEN = (10,255,0)
-BLUE = (255,0,0)
-RED =  (0,0,255) 
-YELLOW = (50,200,200)
-MAGENTA=(255, 0, 255)
-CYAN = (255,255,0)
-BLACK = (0,0,0)
 
-projetPath = '/home/moi1/Documents/dev_py/vision/PROJET_Face-Tracking-camera/'
 
-class NpEncoder(json.JSONEncoder):
-    """ 
-    https://stackoverflow.com/questions/50916422/python-typeerror-object-of-type-int64-is-not-json-serializable 
-     
-        data_json= json.dumps(data, cls=NpEncoder)
-        json.dumps(data_json, file)
-    """
-    def default(self, obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        elif isinstance(obj, np.floating):
-            return float(obj)
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-        else:
-            return super(NpEncoder, self).default(obj)
+import file_management as fl 
+import visualization as v
 
 """
  Kalman Filter In OpenCV : 
@@ -65,29 +42,7 @@ momentum_filter find_optimal_momentum_filter
 
 """
 
-        
-def visualizeTraject(img, trajectory, color=GREEN):
-    """
-    Draw the trajectory of the non-filtered face center coordinates upon the video frame image,
-    Args:
-        img :_type_: image, frame from the video
-        faceCenterTraject :list of (int16,int16) coordinates: 
-                                Trajectory of the non-filtered face center coordinates
-
-    Returns:
-        _type_: image from the video with an additional trajectory drawn upon it
-    """
-    try:
-        for p in trajectory:
-            x = int(np.round(p[0]))
-            y = int(np.round(p[1]))
-            cv.circle(img, (x,y), 1, color, 1)
-    #except # just skip if fails
-    
-    finally:    
-        return img
-
-def saveTraject(faceCenterTraject, faceCenterTraject_t, mode):
+'''def saveTraject(faceCenterTraject, faceCenterTraject_t, mode):
     n=1
     # If faceCenterTraject is long enough, we save it in JSON to represent
     # the non-filtered signal behavior in the case of each mode 
@@ -113,35 +68,7 @@ def openTraject(file):
     #print(type(t_[0])) # float
     t = [ (t - t_[0]) for t in t_ ]
     return x,y,t 
-
-def plotTraject(x,y, t, x_label = "t     [seconds]" ):
-    fig, axs = plt.subplots(2)#(figsize=(10, 6))
-    fig.suptitle('Fitting face trajectory in tracking mode')
-    #axs[0].plot(t, x)
-    #axs[1].plot(t, y)
-    #ax.set_title("Kalman Filter in 2D Motion Estimation")
-    
-    for n,z in enumerate([x,y]):
-        axs[n].scatter(t, z, c='red', s=1, label=f"Noisy Observations in {z}")
-    #ax.plot(predictions[:, 0], predictions[:, 1], 'b-', label="Kalman Filter Estimation")
-    axs[1].set_xlabel(x_label)
-    #ax.set_ylabel("x")
-    #ax.set_xlim(0, 10)
-    #ax.set_ylim(-1.5, 1.5)
-    #ax.legend()
-
-
-    #----
-    fig, ax = plt.subplots(figsize=(10, 6))
-    fig.suptitle('Fitting face trajectory in tracking mode')
-    #ax.plot(t, x)   
-    ax.scatter(t, x, c='red', s=1, label=f"Noisy Observations in x")
-    ax.set_xlabel(x_label)
-    #----
-
-    plt.show() 
-
-#================================================================
+'''
 
 #-------sans sklearn ni statsmodels ----------
 from scipy.stats.distributions import norm    
@@ -333,7 +260,7 @@ def returnMeasurNoiseFromTraj():
     jsonFile = ['faceCenterTraject_0_tracking.json',
                  'faceCenterTraject_0_detection.json']
     
-    t,x,y = openTraject(projetPath+jsonFile[0])
+    t,x,y = fl.openTraject(jsonFile[0])
     
     # Initial state condition:
     #print(f'x0={x[0]}')
@@ -357,35 +284,6 @@ def returnMeasurNoiseFromTraj():
                 'tracking': R_track}
     return measurCov
 
-def showTraj(measurements, predictions):
-    measurements = np.array(measurements).squeeze()
-    predictions = np.array(predictions)
-    predictions = predictions.squeeze()
-
-    # sample number
-    nb =predictions[:, 0].shape[0]  
-    
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.set_xlim(0, 700)
-    ax.set_ylim(250, 450)
-    ax.set_title("Kalman Filter in 2D Motion Estimation")
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-                
-    # Plotting the noisy measurements and Kalman filter estimations
-    ax.scatter(measurements[:, 0], 
-                measurements[:, 1], 
-                c='red', s=10, label="Noisy Measurements")
-    ax.plot(predictions[:, 0].reshape((nb,1)), 
-            predictions[:, 1].reshape((nb,1)),
-            'b-', label="Kalman Filter Estimation")
-    
-    #ax.scatter(predictions[:, 0].reshape((nb,1)), 
-    #    predictions[:, 1].reshape((nb,1)), 
-    #    c='blue', s=10, label="Kalman Filter Estimation")
-
-    ax.legend()        
-    plt.show() 
 
 def initFiltering(initPt, mode='tracking'):
     #TODO: to refactor Filtering  into a class
@@ -406,7 +304,9 @@ def updateFiltering(newMeasurement, kalmanFilter, predictions):
     return predictions
  
          
-#-----   Tests & simple examples
+#  ============= Tests & simple examples =============================================
+import matplotlib.pyplot as plt
+
 def testKalmanFilter():
     """    
     Try to filter face center trajectories in the visual field
@@ -424,7 +324,7 @@ def testKalmanFilter():
     jsonFile = ['faceCenterTraject_0_tracking.json',
                 'faceCenterTraject_0_detection.json']
 
-    x,y,t = openTraject(projetPath+jsonFile[0])
+    x,y,t = fl.openTraject(jsonFile[0])
     
      
     # Filtering initialization
@@ -436,7 +336,7 @@ def testKalmanFilter():
         predictions = updateFiltering(newMeasurement,kalmanFilter, 
                                                    predictions)
         measurements.append(newMeasurement) # type: list of arrays of shape (2,1)
-    showTraj(measurements, predictions)
+    v.showTraj(measurements, predictions)
 
 def simpleExample():
     """ 

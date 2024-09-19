@@ -12,17 +12,14 @@ import multiprocessing as mp
 import cv2 as cv
 import numpy as np
 
-#from PIL import Image, ImageTk #TODO should be in the image file /or class ?
-#import tkinter as tk
-
 from sklearn.linear_model import LogisticRegression
-from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier
+from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier, KernelDensity
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.metrics import classification_report
 
-import file as fl
+import file_management as fl
 import util as u
 import new_face_gui_tk as gui
 
@@ -37,12 +34,14 @@ https://github.com/opencv/opencv/blob/4.x/samples/dnn/face_detect.py#L99
 
 class FaceRecognition:
     
-    def __init__(self,isActive = True, faceNames2check= None):
-        self.isActive = isActive       
-        self.faceNames = self.setFaceNames(faceNames2check) # face names we want to recognize
+    def __init__(self,isActive = True, faceNames= None):
+        self.isActive = isActive  
+
+        self.faceNames = self.returnFaceNames(faceNames) # face names we want to recognize
          
         self.inputQueue = mp.Queue()       # Queue for moving face images to the face recognition task
-        # WARNING ***  multiprocessing queue are slow (image are large objects that needed to be serialized)
+        # WARNING *** !! multiprocessing queue are slow when transferring large objects !! 
+        # (images are large objects that needed to be serialized)
         # https://www.mindee.com/blog/why-are-multiprocessing-queues-slow-when-sharing-large-objects-in-python
         
         self.resultQueue = asyncio.Queue() # Queue for capturing the recognition results (i.e. face names)
@@ -52,29 +51,38 @@ class FaceRecognition:
                             os.path.join(fl.BASE_DIR,'face_recognition_sface_2021dec.onnx'), 
                             "" )
         
-        self.faceEmbeddingsDict =dict()  
-       
-        # ------------   Classifiers to apply to the face embeddings -------------------- 
+        self.faceEmbeddingsDict ={name: list() for name in self.faceNames} 
+        self.X = None 
+        self.y = np.array(range(len(self.faceNames))) # class labels are indices in faceNames
+        
+        # ------------ For dist-based discrimination of the unrecognized category -------
+        # TODO ?  Should we organize this criterion into a new class ???
+        self.centroidsDict   = {name: None for name in self.faceNames}  
+        self.discreteDistribDict = {'l2': dict(), 'cosine':dict()} 
+        self.radiusDict      = {'l2': dict(), 'cosine':dict()}
+        self.kernelDensity   = {'l2': dict(), 'cosine':dict()}
+        
+        # ------------   Classifiers to apply to the face embeddings ------------------------- 
         self.LogisticRegressionClf = LogisticRegression(random_state=0)
+        self.LogRegr_isTrained = False
         
-        # k-nearest-neighbors classifiers with learnable thresholds 
+        # --- k-NearestNeigbor for classification of the face features embeddings-------
+        # k-nearest-neighbors classifiers
         self.kNNClfs = dict()  #  Dictionary of kNN classifiers with respect to various metrics
-        self.kNNClf_thresholds = dict()
-        self.kNNClf_ratioThresholds = dict()
-        
         #  n_neighbors: to be determine via cross-validation
         # some possibily useful methods : get_params(), set_params()
         #                                 kneighbors()  : find the k neighbors and their distances  
         #                                 predict(), predict_proba(X)      
         # scikit-learn.org/stable/modules/generated/sklearn.neighbors.NearestNeighbors.html
         
-        
-        # ------------------                             -----------------------------------
-        self.newFaceIdThread = ThreadPoolExecutor(max_workers=1) # Thread for running newFaceId ********
+        self.kNN_isTrained = False
+        # ------------------ For new face identification  --------------------------------------
+        self.newFaceIdThread = ThreadPoolExecutor(max_workers=1) # Thread for running newFaceId 
         # Queue for moving a new face identity (faceName) from  newFaceIdGUI
         self.newFaceIdQueue = qu.Queue() 
         self.newFaceIdGUI = None # Only created when required for new face identification
-        
+      
+    # ================== For the execution of face recognition loop ===============    
     def putImgQueue(self, img):
         """ Put the face image in the queue for face recognition. 
         The image will show up in runFaceRecognitionTask()        
@@ -127,9 +135,8 @@ class FaceRecognition:
                 # Notify the queue that the task is done
                 self.resultQueue.task_done()
 
-    async def retrieveNewFaceId(self):
-        # TODO  **********           ********************
-        #newFaceId = await self.newFaceIdQueue.get()  # for an async queue
+    async def processNewFaceId(self):
+    
         while True:
     
             print('We are awaiting for the new face id.') # for an non-async queue sending data to newFaceIdThread
@@ -149,41 +156,27 @@ class FaceRecognition:
             
             # (?)TODO  For now it is silly: we simply convert all face embeddings again ! 
             # (but I think it is fast enough to justify avoiding the complications... )    
-            X, y = self.convertFaceEmbeddingsInArrays()
-            self.trainKNNClfs(X, y)
+            self.stackFaceEmbeddingsInArray()  # recompute and set self.X
+            self.trainKNNClfs(self.X, self.y)
             print(f'We just retrained the kNN layer to (hopefully) recognize {faceName}.')
 
+            self.prepareUnrecognitionCriteria() 
+            print('We just recomputed the distance-based criteria for unrecognized faces.')
             
-    def embeddingsAreSaved(self):
-        """ 
-        Returns a Boolean value: True when we find a file that contains the SFace features embeddings 
-        
-        """
-        # TODO
-        return False
-    
-    def loadEmbeddings(self):
-        # TODO
-        NotImplemented
-            
-    def kNNClfsAreTrained(self):
-        # TODO
-        return False 
-        
+    # =========================  Preparation ============================================      
+
     def loadkNNClfs(self):
         #TODO
         NotImplemented  
     
-    def setFaceNames(self,faceNames2check =None):
-        if faceNames2check is None:
+    def returnFaceNames(self,faceNames =None, exclude=None):
+        if faceNames is None:
             #Default: list face_names i.e. directory names in DATAPATH, except the ones that end with '_new'
-            self.faceNames = fl.listFaceNames() # ex: ['audrey', 'francois', 'victor', ']
+            return fl.listFaceNames() # ex: ['audrey', 'francois', 'victor', ']
         else:
-            self.faceNames = faceNames2check 
+            return faceNames 
       
-    def prepareFaceRecognition(self):   # TODO
-        
-        self.setFaceNames(['audrey','francois'])
+    def prepareFaceRecognition(self): 
         
         # Compute or load self.faceEmbeddingsDict[face_name] 
         if not self.embeddingsAreSaved():
@@ -192,13 +185,18 @@ class FaceRecognition:
             self.loadEmbeddings()
         
         # Compute or load the knn classifier (self.kNNClfs[metric] )   
-        if not self.kNNClfsAreTrained():    
-            X, y = self.convertFaceEmbeddingsInArrays()
-            self.trainKNNClfs(X, y)
+        if not self.kNN_isTrained:    
+            self.stackFaceEmbeddingsInArray()  # sets self.X, self.y
+            self.trainKNNClfs(self.X, self.y)
+            self.kNN_isTrained = True
         else: 
             self.loadkNNClfs()  
         
         # TODO:Compute or load eventual additional classifiers (logistic regression...)
+        
+        
+        # prepare the distance threshold criteria for recognition
+        self.prepareUnrecognitionCriteria()        
         print('FaceRecognition preparation has been done.')      
     
     # =========================    Face feature embeddings ==============================    
@@ -206,20 +204,23 @@ class FaceRecognition:
         """Train SFace algorithm by computing face embeddings.
         
         It prepares a dictionary of the embeddings of face features of each face name
-        self.faceEmbeddingsDict = { face_name1:  [img1features, img2features ...], 
-                                    face_name2: [...],
+        self.faceEmbeddingsDict = { face_name1:  array(N0, dim), 
+                                    face_name2:  array(N1, dim),
                                     ...}
+                                    where   Nn = number of images 
+                                            dim = embedding dimension (=128)
         """
         for face_name in face_names:
             embeddings = []
             for face_img in fl.yieldFaceImgs(face_name):     #np.ndarray
                 # REM: ils utilisaient aligncrop() pour obtenir face_img
                 embedding = self.recognizer.feature(face_img)
-            
                 #print(embedding.shape)   # (1,128)
+                dim = embedding.shape[1]
                 embeddings.append(embedding)
             
-            self.faceEmbeddingsDict[face_name]  = (np.array(embeddings)).reshape(len(embeddings), 128)
+            Nn = len(embeddings)   
+            self.faceEmbeddingsDict[face_name]  = (np.array(embeddings)).reshape(Nn, dim)
             
         
     def computeAllFaceEmbeddings(self):
@@ -238,41 +239,49 @@ class FaceRecognition:
         identified by the user. 
         
         """
+        # Compute the feature embedding of the new face image
+        X = self.recognizer.feature(faceImg)   # (1,128)  
+    
         # In case we never met 'faceName' before:
         if faceName not in self.faceEmbeddingsDict.keys(): 
-            self.faceEmbeddingsDict[faceName] =list()
-        
-        # Compute the feature embedding of the new face image
-        embedding = self.recognizer.feature(faceImg)   # (1,128)  
-        self.faceEmbeddingsDict[faceName].append(embedding)
-        print('We just compute the face embeddings of the new {faceName} image.')
+            self.faceEmbeddingsDict[faceName] = X
+        else:         
+            # stack them
+            X_n = self.faceEmbeddingsDict[faceName]  # (Nn, 128)
+            self.faceEmbeddingsDict[faceName] = np.vstack([X,X_n]) # (Nn+1, 128)
+        print('We just add the face embeddings to the new {faceName} image.')
             
     
-    
+    '''# TODO: A ENLEVER
     def convertFaceEmbeddingInArrays_1faceName(self, n, faceName):
         """  Convert the faceEmbeddings in arrays for a given faceName associated to index n"""
-        X_n = np.array(self.faceEmbeddingsDict[faceName])  # array(Nn, 128)  where Nn = #{images}
+        print(self.faceEmbeddingsDict[faceName].shape)
+        X_n =self.faceEmbeddingsDict[faceName]
+        #X_n = np.array(self.faceEmbeddingsDict[faceName])  # array(Nn, 128)  where Nn = #{images}
         lenght = X_n.shape[0]
-        X_n = X_n.reshape(lenght,128)
+        #X_n = X_n.reshape(lenght,128)
         y_n = (np.array([n]*lenght)).reshape(lenght,)      # array(Nn, )
         return X_n, y_n
+    '''
     
-    def convertFaceEmbeddingsInArrays(self):
+    def stackFaceEmbeddingsInArray(self):
         """   
-        Face Embeddings is a dictionary of list of image feature embeddings: 
-                            {'audrey': [img_embed1, img_embed2, ...], 'francois':[...]}
+        Face Embeddings is a dictionary of array of image feature embeddings: 
+                            {'audrey': array(N0,128), 'francois':array(N1,128)}
                             where img_embed1, img_embed2, ...are np.array(1,d) , d=128 dimensions
             
         But sci-kit-learn methods expect the dataset to be in np.arrays
         i.e. 
-        X : np.array(n, d)   : data points (i.e.faceEmbeddings) for a given label (i.e. face name)
-        y : np.array(1,n)    : array of label indices ( i.e. each index represents a face name)
+        X : np.array(Nn, dim) : data points (i.e.faceEmbeddings) for a given label (i.e. face name)
+        y : np.array(Nn,)     : array of label indices ( i.e. each index represents a face name)
         """
         for n, faceName in enumerate(self.faceEmbeddingsDict.keys()):
             #embed_list = self.faceEmbeddingsDict[faceName] # list of array(1,128)
             #y_n = n*len(embed_list)
-            X_n, y_n = self.convertFaceEmbeddingInArrays_1faceName(n, faceName)
-    
+            X_n = self.faceEmbeddingsDict[faceName]
+            Nn = X_n.shape[0]
+            y_n = (np.array([n]*Nn)).reshape(Nn,)      # array(Nn, )
+            
             # Stack the arrays X <--- [ X|X_n ]
             if n == 0:
                 X = X_n
@@ -280,67 +289,24 @@ class FaceRecognition:
             else:
                 X = np.vstack([X,X_n])
                 y = np.hstack([y,y_n])
-        return X,y
-    
-    
-    '''# ================================   A first naive match criterion =========================================    
-    def _computel2Scores(self, newFace_features, faceName, l2_similarity_threshold = 1.128):
-        l2Scores = list()
-        for face_features in self.faceEmbeddingsDict[faceName]:
-            l2Scores.append(self.recognizer.match(newFace_features, face_features, 
-                                             cv.FaceRecognizerSF_FR_NORM_L2)
-                            )
-        l2Match = [(l2Score <= l2_similarity_threshold) for l2Score in l2Scores]
-        return l2Scores, l2Match
-    
-    def _computeCosineScores(self, newFace_features, faceName,cosine_similarity_threshold = 0.363):
-        cosineScores = list()
-        for face_features in self.faceEmbeddingsDict[faceName]:   
-            cosineScores.append(self.recognizer.match(newFace_features, face_features, 
-                                                 cv.FaceRecognizerSF_FR_COSINE)
-                                )
-    
-        cosineMatch= [(cosScore >= cosine_similarity_threshold) for cosScore in cosineScores]
-        return cosineScores, cosineMatch
-       
-    def isAMatch_positiveFraction(self, faceImg, faceName):
-        """  Detects a likely match between faceImg and faceName based on the positive fraction of 
-        cosine similarity and l2 similarity.
-        
-        Args:
-            faceImg: np.ndarray : the face image we want to recognize. 
-
-            faceName: string: face name
-        
-        Returns:  fraction of element in the embeddings[faceName] list that match with respect to 
-                  both cosine_similarity and l2_similarity, given the pre-defined thresholds
-        
-        """
-        
-        newFace_features = self.recognizer.feature(faceImg)
-        cosineScores, cosineMatches= self._computeCosineScores(newFace_features, faceName)
-        l2Scores, l2Matches = self._computel2Scores(newFace_features, faceName)
-        doesMatch = cosineMatches and l2Matches 
-        positiveFraction = len([e for e in doesMatch if e])/len(doesMatch)
-        return positiveFraction
-
-    # TODO ??  to delete when we obtain a good classifier that works 
-    async def recognizeFace_v1(self, unknownFaceImg):
-        """
-        Performs face recognition with SFace on a specific face image in arg
-        """
-        positiveFraction = dict()
-        for faceName in self.faceNames:
-            positiveFraction[faceName]  = self.isAMatch_positiveFraction(unknownFaceImg, 
-                                                                        faceName)
-    
-        recognizedName = u.argmax_dict(positiveFraction)
-        print(f'The stranger face is more likely {recognizedName}')
-        
-        return (recognizedName, positiveFraction[recognizedName])
+                
+        #return X,y
+        self.X = X
+        self.y = y 
  
-    '''
+    # TODO ?        
+    def embeddingsAreSaved(self):
+        """ 
+        Returns a Boolean value: True when we find a file that contains the SFace features embeddings 
+        
+        """
+        # TODO
+        return False
     
+    def loadEmbeddings(self):
+        # TODO
+        NotImplemented
+        
     # ============ Logistic regression classifier to apply over the SFace features embeddings===========
     # TODO   
     async def recognizeFace_LogisticRegression(self, unknownFaceImg):
@@ -368,7 +334,7 @@ class FaceRecognition:
         We compute it as the faceName associated with the metric whose predictor 
         has the best predicted_proba      
         """
-        newFace_features = self.recognizer.feature(newFaceImg)
+        newFace_features = self.recognizer.feature(newFaceImg) # X
                
         # i.e. {metric : (faceName, predict_proba) for metric in [l2,cosine]}  
         predict_proba = { metric:  self.predict_kNNClf(newFace_features, metric ) 
@@ -379,10 +345,18 @@ class FaceRecognition:
         print(faceNames_proba_list)
         
         # faceName such that proba is max in [(faceName_l2, proba_l2), (faceName_cos, proba_cos)]
-        faceName, faceName_prob = u.argmax_tupls(faceNames_proba_list )
+        (faceName, faceName_prob), index = u.argmax_tupls(faceNames_proba_list )
+        metric = ['l2', 'cosine'][index] # metric giving the best result above 
         
         print(f'We recognize the face of {faceName} with prob={faceName_prob}')
+        
+        # False if unrecognized, according to the distance threshold criterion
+        if not self.isRecognized(newFace_features,faceName,metric):
+            print('Finally the face is classified as unrecognized.')
+            return 'unrecognized', None
+        print(f'Cassified as recognized: {faceName} ')    
         return faceName, faceName_prob
+    
         
     def trainKNNClfs(self,X, y):
         """  Trains k-nearest-neighbors classifiers
@@ -390,28 +364,16 @@ class FaceRecognition:
         X: np.array (n, d):   n data points in d-dimensions
         y: list len(y)=n , OR np.array (1,n): data labels   
         """        
-        # Determine distance threshold from validation set
-        def find_dist_threshold( X_val, y_val, quantile=0.98):
-            pipeline = self.kNNClfs[metric]
-            distances, _ = pipeline['knn'].kneighbors(X_val) # kneighbors =??
-            # Calculate distances for correct classifications
-            correct_distances = [
-                distances[i, 0] for i in range(len(y_val))
-                if pipeline.predict(X_val[i].reshape(1, -1)) == y_val[i]
-            ]
-            # Use a high quantile to set the threshold
-            threshold = np.quantile(correct_distances, quantile)
-            return threshold
-
+        '''
         def find_probaRatioThreshold(X_val, y_val):
             """Returns the optimal threshold for the ratio between first ans second nearest classes. 
             
             The closer to 1 is the ratio, the lower is the classification signicance. i.e the actual
             classification might be 'stranger'. 
             """
-            threshold=1 
+            threshold=2
             return threshold 
-        
+        '''        
         # Split data into training and validation sets
         X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=0)
 
@@ -436,13 +398,124 @@ class FaceRecognition:
             
             model = self.kNNClfs[metric]['knn']  # type : KNeighborsClassifier
             print( f'k-nearest-neighbor with k={model.n_neighbors} and metric={metric}')
-            
-            # Get the threshold from validation data            
-            #self.kNNClf_thresholds[metric] = find_dist_threshold( X_val, y_val)
-            self.kNNClf_ratioThresholds[metric] = find_probaRatioThreshold( X_val, y_val)
-            
+
+    # ========== dist-based Threshold criteria for the unrecognized category ============
     
-    # Predict function with threshold
+    def dist_l2(self,features1, features2=None):  
+        features1 = features1.reshape(1,128).astype(dtype=np.float32)
+        if features2 is None: 
+            features2 = np.zeros(features1.shape)
+        features2 = features2.reshape(1,128).astype(dtype=np.float32) 
+        dist1 = self.recognizer.match(features1, features2,cv.FaceRecognizerSF_FR_NORM_L2)
+        #dist2 = np.linalg.norm(features1 - features2, ord=2).astype(dtype=np.float32)  # OK dist2 == dist1
+        #dist3 = np.sum((features1 - features2)**2).astype(dtype=np.float32)   # square of l2 dist
+        return dist1   # dist2 and np.square(dist3)  are equivalent 
+    
+    def dist_cosine(self,features1, features2=None):
+        features1 = features1.reshape(1,128).astype(dtype=np.float32)
+        if features2 is None: 
+            features2 = np.zeros(features1.shape)
+        features2 = features2.reshape(1,128).astype(dtype=np.float32)
+        return self.recognizer.match(features1, features2,cv.FaceRecognizerSF_FR_COSINE)     
+        
+ 
+                        
+    def computeCentroids(self):
+        for faceName in self.faceEmbeddingsDict.keys():
+            # faceEmbeddingsDict : list of arrays
+            xArr =self.faceEmbeddingsDict[faceName] #  array (Nn, 128)            
+            Nn = xArr.shape[0]
+            dim =  xArr.shape[1] # =128
+            centroid = (np.sum(xArr,0)/Nn).reshape(1, dim)
+            self.centroidsDict[faceName] = centroid.astype(dtype=np.float32)
+                
+       
+    def computeDistToCentroid(self, X, faceName, dist ='l2'):
+        """Compute the distance dist of X to the centroid of faceName   """
+        distFct = {'l2':self.dist_l2 ,'cosine': self.dist_cosine }
+        centroid = self.centroidsDict[faceName] 
+        
+        return distFct[dist](centroid, X)
+ 
+               
+    def computeDistDistrib(self):
+        """ 
+        For each faceName and each distance metric (l2 or cosine):
+        Compute the discrete distribution of the distances to the centroid. 
+        and the radius (=maximum distance between the centroid and a data point)
+        i.e.: 
+        It sets:  
+            self.distDistribDict[dist][name] : list of increasing distance values
+            self.radiusDict[dist][name]      : maximum distance
+        """                  
+        for dist, distFct in [('l2',self.dist_l2), ('cosine',self.dist_cosine)]:
+            for name in self.faceEmbeddingsDict.keys():
+                centroid =  self.centroidsDict[name]
+                X_n = self.faceEmbeddingsDict[name]
+                print(type(centroid))
+                print(centroid.shape)
+                distrib = sorted([distFct(centroid,x) for x in X_n])
+                self.discreteDistribDict[dist][name] = distrib
+                
+    def computeRadius(self):
+        for dist in ['l2','cosine']:
+            for name in self.faceEmbeddingsDict.keys():
+                distrib =self.discreteDistribDict[dist][name]
+                self.radiusDict[dist][name] = distrib[-1]            
+                        
+    
+
+    def estimateDistDensity(self, discreteDistrib):
+        # Not Necessarily useful but can be interesting to understand the data
+        """ 
+        Estimate the density distribution of distances to centroid 
+        with kernel density (unsupervised learning)
+        Only makes sense when Np large enough (Np > Np_thresh )
+        
+        discreteDistrib : list  (like self.distDistribDict[dist][name] )
+        """
+        
+        Np_thresh = 8
+        for dist in ['l2','cosine']:
+            for name in self.faceEmbeddingsDict.keys():
+                distancesList = self.discreteDistribDict[dist][name]
+                
+                Np = len(distancesList)
+                if Np >= Np_thresh:
+                    X = np.array(distancesList)  # array of distances
+                    
+                    # TODO Choice of the smoothing parameter: 
+                
+                    
+                    h=0.2   
+                    density = KernelDensity(kernel ='gaussian', bandwidth=h).fit(X)
+                    self.kernelDensity[dist][name] =density 
+       
+    def prepareUnrecognitionCriteria(self):
+        
+        # Criteria is based on a distance threshold and centroids 
+        # for all faceName      
+        self.computeCentroids()   # Centroids of the data clusters 
+        self.computeDistDistrib() #   
+        self.computeRadius()      # Radius of the data clusters   
+        
+                
+    def isRecognized(self,X,faceName,dist='l2'):
+        """
+        Return: 
+            True when 'recognized' and we keep the {faceName} prediction of the classifier (kNN...)
+            i.e.  if the distance of X to centroid < the maximal distance to centroid (i.e. the radius)
+         
+            False when 'unrecognized'          
+         """        
+        if self.computeDistToCentroid(X, faceName, dist) < self.radiusDict[dist][faceName]:
+            return True
+        else: 
+            return False
+        
+    # =============================    ===============================
+       
+        
     def predict_kNNClf(self,  X, metric ='l2'):
         """
         X: np.array(1,d) : feature embedding of the current face to classify 
@@ -457,23 +530,7 @@ class FaceRecognition:
                                     key=lambda x: x[1], 
                                     reverse=True)
       
-        #print(predictions_sorted) # list of tuples 
-        
-        if len(predictions_sorted) >1:
-            pred0 = predictions_sorted[0][1]
-            pred1 = predictions_sorted[1][1] + 0.001 # to avoid division by 0
-            predict_ratio = pred0/pred1 
-        else: 
-            predict_ratio = 2
-        predicted_index, pred_proba = predictions_sorted[0]
-
-        #print(predictions_sorted[0]  )                       
-        #print(predicted_index,  pred_proba)
-                
-                
-        #s ad-hoc threshold :TODO to determine more systematically
-        if predict_ratio < self.kNNClf_ratioThresholds[metric]:
-            return 'stranger', pred_proba   # The less the proba, the more likely it is to be 'stranger'
+        predicted_index, pred_proba = predictions_sorted[0]               
         
         return self.faceNames[predicted_index], pred_proba 
 
@@ -484,7 +541,15 @@ class FaceRecognition:
     
         
  
-            
+    ## ============================== For (face features) data visualization ===========================         
+     
+    def project3D_PCA(self):
+        from sklearn.decomposition import PCA   # Bad practice !! temporary
+        
+        X = self.convert
+        pca = PCA(n_component =3,whiten=False )
+        data = pca.fit_transform(X)
+    
     ## =========  tests   ==========================================
     async def test_runTask(self):
         """To test the asyncio/process/threads structure

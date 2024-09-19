@@ -10,13 +10,72 @@ import cv2 as cv
 from cv2 import imread
 from PIL import Image
 import imghdr
+import json 
 
 # Finding the path of the base directory i.e path were this file is placed
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = dirname(os.path.abspath(__file__))
 #BASE_DIR2 = '/home/moi1/Documents/dev_py/vision/PROJET_Face-Tracking-camera/'
 
 DATAPATH = join(BASE_DIR,'faces_data')
-       
+   
+YUNET_DETECTION_PATH = join(BASE_DIR, 'face_detection_yunet_2023mar.onnx')   
+VIT_TRACKING_PATH = join(BASE_DIR, 'object_tracking_vittrack_2023sep.onnx')   
+# =======================================================================================
+#        File management for trajectories                                               #     
+# =======================================================================================       
+
+class NpEncoder(json.JSONEncoder):
+    """ 
+    https://stackoverflow.com/questions/50916422/python-typeerror-object-of-type-int64-is-not-json-serializable 
+     
+        data_json= json.dumps(data, cls=NpEncoder)
+        json.dumps(data_json, file)
+    """
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return super(NpEncoder, self).default(obj)
+   
+def saveTraject(faceCenterTraject, faceCenterTraject_t, mode):
+    n=1
+    # If faceCenterTraject is long enough, we save it in JSON to represent
+    # the non-filtered signal behavior in the case of each mode 
+    # (detection mode and tracking mode)  
+    traject_filename = join(BASE_DIR, f'faceCenterTraject_{n}_{mode}.json')
+
+    if len(faceCenterTraject) > 20:
+        with open(traject_filename, 'w') as f:
+            data = {'coord': faceCenterTraject, 
+                    'time':faceCenterTraject_t}
+            json.dump(data, f, cls=NpEncoder)
+ 
+  
+def openTraject(file):
+    """We open and plot the trajectory To visualize how we should filter it."""
+    
+    file = join(BASE_DIR, file)
+    
+    with open(file) as f:
+        data = json.load(f) # str
+    
+    coordTraject  = data["coord"] #format: [(x,y), ...]
+    x = [c[0] for c in coordTraject]
+    y = [c[1] for c in coordTraject]
+    t_ = data["time"] 
+    #print(type(t_))    # list
+    #print(type(t_[0])) # float
+    t = [ (t - t_[0]) for t in t_ ]
+    return x,y,t 
+   
+   
+# =======================================================================================
+#        File management for images                                                     #     
+# =======================================================================================       
 def isValidJPG(f):
     """DeprecationWarning: 'imghdr' is deprecated 
     and slated for removal in Python 3.13"""
@@ -69,13 +128,14 @@ def listStrangers():
                   if   isNameDir(f)
                   and  'stranger' in f 
             ] 
-    
+ 
+                    
 def readFaceImgs_v1(filename = 'strangers_new'):
     """ returns a list of all images of name <name> """
     name_dir = join(DATAPATH, filename.lower())
     imgs = list()
     for f in listdir(name_dir):   
-        if splitext(f)[1] in ['.jpg', '.jpeg', '.png']:   
+        if splitext(f)[1] in ['.jpg', '.jpeg']:   
             try:     
                 print(cv.imread_defines)
                 # "IMREAD_LOAD_GDAL" and "IMREAD_LOAD_IMAGE_REDUCER"
@@ -96,7 +156,7 @@ def yieldFaceImgs(face_name):
     name_dir = join(DATAPATH, face_name.lower())
     imgs = list()
     for f in listdir(name_dir):   
-        if splitext(f)[1] in ['.jpg', '.jpeg', '.png']:   
+        if splitext(f)[1] in ['.jpg', '.jpeg']:   #isValidJPG(f): 
             try:     
                 im = imread(join(name_dir,f)) 
                 if im is None: 
@@ -107,7 +167,7 @@ def yieldFaceImgs(face_name):
                 continue    
     
     
-def readImgFiles(filename = 'strangers_new', number=-1):
+def readImgFiles(dirname = 'strangers_new', number=-1):
     """  Reads and returns at most {number} images in directory {filemame} 
     
     Default number =-1 means we loop over all files in {name_dir}
@@ -115,7 +175,7 @@ def readImgFiles(filename = 'strangers_new', number=-1):
     returns:  list of (id,im) , for id, f in enumerate(listdir(name_dir))
     """
     
-    name_dir = join(DATAPATH, filename)
+    name_dir = join(DATAPATH, dirname)
     imgs = list()
     #correctFiles = list()
     for id, f in enumerate(sorted(listdir(name_dir))):
@@ -126,6 +186,7 @@ def readImgFiles(filename = 'strangers_new', number=-1):
             filepath = join(name_dir,f)
             if not isValidJPG(filepath) : 
                 print(f'{id}: The file {f} is not a valid jpeg !!??')
+                continue
             im = imread(filepath)
             if im is None:
                 print(f'File {f} has no image despite being a valid jpeg !')

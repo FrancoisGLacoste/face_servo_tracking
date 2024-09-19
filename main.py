@@ -1,12 +1,12 @@
-
+# -*- encoding: utf-8 -*-
 
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import multiprocessing as mp
 
 from face_recognition_SFace_oo import FaceRecognition
 from face_servo_tracking_oo import face_servo_tracking
 from face_servo_tracking_oo import test_face_servo_tracking_1, test_retrieve_results_1
+
 
 async def main():   
     
@@ -19,11 +19,11 @@ async def main():
                            args=(faceRecognition,) )
     camera_process.start()
      
-    # During the face servo-tracking, face recognition is performed on a separate thread pool
+    # During the face servo-tracking execution, those asynchronous loops are also running concurrently:
     await asyncio.gather(
-            faceRecognition.runFaceRecognitionTask(),
-            faceRecognition.retrieveResults(),  # where results are retrieved 
-            faceRecognition.retrieveNewFaceId(),   
+            faceRecognition.runFaceRecognitionTask(), #face recognition runs on a separate thread pool.
+            faceRecognition.retrieveResults(), # where recognition results are retrieved .
+            faceRecognition.processNewFaceId(),# where unrecognized faces are processed.   
             )
     
     camera_process.join()
@@ -34,8 +34,8 @@ async def test_main_async_process():
     """ Test 1 
         To test the asyncio/process/threads structure
         Without doing anything but passing numbers as data
-    test_face_servo_tracking_1 <----- face_servo_tracking  
-    test_retrieve_results_1    <----- retrieve_results
+    test_face_servo_tracking_1 <-----> face_servo_tracking  
+    test_retrieve_results_1    <-----> retrieve_results
     faceRecognition.test_runTask 
     """
     faceRecognition = FaceRecognition() 
@@ -44,6 +44,7 @@ async def test_main_async_process():
     camera_process.start()
     await asyncio.gather(
             faceRecognition.test_runTask(),
+            # injecting the queue could be a better practice 
             test_retrieve_results_1(faceRecognition.resultQueue)       
             )
     
