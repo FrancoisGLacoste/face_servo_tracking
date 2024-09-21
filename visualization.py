@@ -122,8 +122,8 @@ def visualizeTraject_inDetection(faceDetection: FaceDetection,
                                  img,faces, select_idx, tm):
     # Rem: output img can be written into a video (videoWrite) 
     
-    smoothCenter = detectionTraject.filteredObs
     faceCenterTraject = detectionTraject.observations
+    smoothCenter = detectionTraject.filteredObs
     img = visualizeDetection(img, faces, smoothCenter,select_idx, tm)
     img = visualizeTraject(img, faceCenterTraject)
     #cv.imshow('Video', img)
@@ -199,9 +199,13 @@ def visualizeDetection(img, faceArray,faceCenter, select_id, tm,verbose=False ):
 
 
 # ================ For Face Tracking =====================================================
-def visualizeTraject_inTracking(img, faceTuple, smoothCenter, score, tm,
-                                faceCenterTraject, 
-                                filteredTraject):
+def visualizeTraject_inTracking(faceTracking: FaceTracking,
+                                trackingTraject: Trajectory, 
+                                img,faceTuple,score, tm):
+
+    faceCenterTraject = trackingTraject.observations
+    filteredTraject = trackingTraject.filteredObs
+    smoothCenter = filteredTraject[-1]
 
     img = visualizeTracking(img, faceTuple, smoothCenter[:2], score, tm)
     img = visualizeTraject(img, faceCenterTraject, GREEN)

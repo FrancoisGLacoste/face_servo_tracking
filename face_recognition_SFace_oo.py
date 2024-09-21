@@ -3,7 +3,7 @@
 """
 face_recognition.py 
 """
-import os 
+import os, time 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import queue as qu
@@ -35,7 +35,7 @@ https://github.com/opencv/opencv/blob/4.x/samples/dnn/face_detect.py#L99
 class FaceRecognition:
     
     def __init__(self,isActive = True, faceNames= None):
-        self.isActive = isActive  
+        self._isActive = isActive  
 
         self.faceNames = self.returnFaceNames(faceNames) # face names we want to recognize
          
@@ -81,7 +81,21 @@ class FaceRecognition:
         # Queue for moving a new face identity (faceName) from  newFaceIdGUI
         self.newFaceIdQueue = qu.Queue() 
         self.newFaceIdGUI = None # Only created when required for new face identification
+        self.idTime = 0
+    
       
+    def afterNewFaceId(self) : 
+        # 
+        timeAfterNewFaceId =  time.time()  -  self.idTime
+        if timeAfterNewFaceId < 120 : # 1 minute
+            return True
+              
+    def isActive(self ):
+        
+        # When a new face has just been id: dont ask for recognition again for some time    
+        if not self.afterNewFaceId():
+            return self._isActive  
+        
     # ================== For the execution of face recognition loop ===============    
     def putImgQueue(self, img):
         """ Put the face image in the queue for face recognition. 
@@ -124,6 +138,8 @@ class FaceRecognition:
                             # Ask the user to id the new face 
                             # The answer is sent to retrieveNewFaceId to be processed
                             gui.createGUI_tk(img, self.newFaceIdQueue) 
+                            self.guiTime = time.time()  #TODO: in GUI class
+                            
                             # TODO: convert the GUI into an object
                         
             except asyncio.CancelledError as e:
@@ -143,6 +159,7 @@ class FaceRecognition:
             newFaceId = await asyncio.get_event_loop().run_in_executor(self.newFaceIdThread,
                                                                     self.newFaceIdQueue.get)
             faceName, faceImg = newFaceId
+            
             print(f'We got {faceName}   to process.')
             print(type(faceImg))
 
