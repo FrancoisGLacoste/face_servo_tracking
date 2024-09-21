@@ -4,11 +4,13 @@ import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
 
-import filtering as filt
+
 from face_detection_yunet_oo import FaceDetection 
 from visual_tracking_oo import FaceTracking
-import visual_tracking_oo as vt
 from face_recognition_SFace_oo import FaceRecognition
+from trajectory import Trajectory
+import visual_tracking_oo as vt
+import filtering as filt
 
 GREEN = (10,255,0)
 BLUE  = (255,0,0)
@@ -116,13 +118,16 @@ def showTraj(measurements, predictions):
 
 # =============     For Face Detection ============================================
 def visualizeTraject_inDetection(faceDetection: FaceDetection,
-                                 img,faces, smoothCenter,select_idx, tm, 
-                                 faceCenterTraject):
+                                 detectionTraject: Trajectory,
+                                 img,faces, select_idx, tm):
     # Rem: output img can be written into a video (videoWrite) 
+    
+    smoothCenter = detectionTraject.filteredObs
+    faceCenterTraject = detectionTraject.observations
     img = visualizeDetection(img, faces, smoothCenter,select_idx, tm)
     img = visualizeTraject(img, faceCenterTraject)
-    cv.imshow('Video', img)
-
+    #cv.imshow('Video', img)
+    return img
 
 
 def visualizeDetection(img, faceArray,faceCenter, select_id, tm,verbose=False ):
@@ -201,8 +206,8 @@ def visualizeTraject_inTracking(img, faceTuple, smoothCenter, score, tm,
     img = visualizeTracking(img, faceTuple, smoothCenter[:2], score, tm)
     img = visualizeTraject(img, faceCenterTraject, GREEN)
     img = visualizeTraject(img, filteredTraject, BLUE)
-    cv.imshow('Video', img)
-   
+    #cv.imshow('Video', img)
+    return img
    
 def visualizeTracking(image, bbox, smoothCenter, score, tm, name=None):
    
