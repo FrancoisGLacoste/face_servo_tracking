@@ -5,12 +5,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-from face_detection_yunet_oo import FaceDetection 
-from visual_tracking_oo import FaceTracking
-from face_recognition_SFace_oo import FaceRecognition
-from trajectory import Trajectory
-import visual_tracking_oo as vt
-import filtering as filt
+#from face_detection_yunet_oo import FaceDetection 
+#from visual_tracking_oo import FaceTracking
+#from face_recognition_SFace_oo import FaceRecognition
+#from trajectory import Trajectory
+#import visual_tracking_oo as vt
+
 
 GREEN = (10,255,0)
 BLUE  = (255,0,0)
@@ -117,14 +117,14 @@ def showTraj(measurements, predictions):
 
 
 # =============     For Face Detection ============================================
-def visualizeTraject_inDetection(faceDetection: FaceDetection,
-                                 detectionTraject: Trajectory,
+def visualizeTraject_inDetection(faceDetection, #: FaceDetection,
+                                 faceCenterTraject,smoothCenterTraj,#detectionTraject: Trajectory,
                                  img,faces, select_idx, tm):
     # Rem: output img can be written into a video (videoWrite) 
     
-    faceCenterTraject = detectionTraject.observations
-    smoothCenter = detectionTraject.filteredObs
-    img = visualizeDetection(img, faces, smoothCenter,select_idx, tm)
+    #faceCenterTraject = detectionTraject.observations
+    #smoothCenterraj = detectionTraject.filteredObs
+    img = visualizeDetection(img, faces, smoothCenterTraj,select_idx, tm)
     img = visualizeTraject(img, faceCenterTraject)
     #cv.imshow('Video', img)
     return img
@@ -199,12 +199,12 @@ def visualizeDetection(img, faceArray,faceCenter, select_id, tm,verbose=False ):
 
 
 # ================ For Face Tracking =====================================================
-def visualizeTraject_inTracking(faceTracking: FaceTracking,
-                                trackingTraject: Trajectory, 
+def visualizeTraject_inTracking(faceTracking, #: FaceTracking,
+                                faceCenterTraject, filteredTraject,
                                 img,faceTuple,score, tm):
 
-    faceCenterTraject = trackingTraject.observations
-    filteredTraject = trackingTraject.filteredObs
+    #faceCenterTraject = trackingTraject.observations
+    #filteredTraject = trackingTraject.filteredObs
     smoothCenter = filteredTraject[-1]
 
     img = visualizeTracking(img, faceTuple, smoothCenter[:2], score, tm)

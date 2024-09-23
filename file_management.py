@@ -54,7 +54,7 @@ def saveTraject(traject:Trajectory, mode):
     if len(traject.observations) > 20:
         with open(traject_filename, 'w') as f:
             data = {'coord': traject.observations, 
-                    'time':traject.observedTrajectTime}
+                    'time':traject.observationsTime}
             json.dump(data, f, cls=NpEncoder)
  
   
