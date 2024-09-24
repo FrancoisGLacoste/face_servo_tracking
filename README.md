@@ -2,4 +2,5 @@
 Face detection, tracking and recognition + servo-control of arduino robotic head
 
 
-Warning : the main branch can run.... but does not actually work properly (see the pull request comment #1 for a list of issues)
+Warning: the main branch runs : the kalman filtering is however not applied to all trajectories. (corrected in Development branch)
+There is still a lot of work to do on the criterion under which unrecognized faces are not sent to the GUI for identification.
