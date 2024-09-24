@@ -1,43 +1,28 @@
 # -*- encoding: utf-8 -*-
 
 
-import time, sys
+import time
  
 import numpy as np
 import cv2 as cv
 
-import file_management as fl    # Custom module for file management 
-import visual_tracking_oo as vt # Custom module for tracking using vittrack
-import filtering as filt     # Custom module for filtering of face center trajectory (Kalman filter)
-import uart                  # Custom module using pyserial for serial communication
-
-import visualization as v    
+# Custom modules and classes
 from face_detection_yunet_oo import FaceDetection 
 from visual_tracking_oo import FaceTracking
 from face_recognition_SFace_oo import FaceRecognition
+from trajectory import Trajectory
+from mode import Mode
+import uart                     # Custom module using pyserial for serial communication
+import visualization as v    
+import file_management as fl    
 
-
-def weSwitch2Tracking(faces, modeTime, ifSwitch = True):
-    """determine when we switch from faceDetection mode to faceTracking mode
-    
-    modeTime : time.Time(): measures the time spent in detection mode
-    """
-    if not ifSwitch: 
-        return False
-    if faces is None: 
-        return False
-    
-    #print(f'detectionModeTime = {modeTime} s')
-    # Stay in detection mode for at least 5 sec
-    if modeTime < 5:
-        return False
-    
-    print('Switch from detection mode to tracking mode now !')
-    return True 
-  
+# ===================================================================             
+# Camera loop with face detection, face tracking. 
+# It sends coord to servo via serial port, 
+# and put face images in a queue for face recognition. 
 # ===================================================================             
 def face_servo_tracking(faceRecognition : FaceRecognition):   
-    ifSwitch2Tracking = True # False: stay only in detection mode
+    
     ifVisualize = True 
     ifSendData = False
     ifSaveVideo = False 
@@ -47,13 +32,14 @@ def face_servo_tracking(faceRecognition : FaceRecognition):
     tm = cv.TickMeter() 
         
     video = cv.VideoCapture(0)
-
+    
     faceDetection = FaceDetection(video)
     faceDetector = faceDetection.detector
+    detectionTraject = Trajectory('detection') # including a Kalman filter
     
-    # faceTracking has to maintain some internal states
     faceTracking = FaceTracking()
     faceTracker = faceTracking.tracker
+    trackingTraject = Trajectory('tracking')  # including a Kalman filter
       
     # Initializes UART communication with microcontroller
     if ifSendData: ser = uart.initUART()
@@ -62,20 +48,14 @@ def face_servo_tracking(faceRecognition : FaceRecognition):
     
     
     # mode: 'faceDetection' OR 'faceTracking 
-    # During faceDetection: if a face is selected, then faceTracking can be activated
-    mode = 'faceDetection'
-    
-    # To measure time spent in face detection mode
-    modeStartTime = time.time()
-    
-    # To follow the trajectory of the selected face center:
-    faceCenterTraject = [] # non-filtered observations
-    observedTrajectTime = [] # time
-         
+    # When a face is selected during faceDetection, then faceTracking 
+    #                                               is activated after a short laps of time.
+    mode = Mode('faceDetection')
+
     
     while video.isOpened():
         isActive, img = video.read()
-        img = cv.resize(img, faceDetector.getInputSize())
+        
         
         if not isActive:
             print('Camera not active!')
@@ -86,126 +66,113 @@ def face_servo_tracking(faceRecognition : FaceRecognition):
             print('Exit the camera loop')
             break
         
-        if mode == 'faceDetection': 
+        if mode.isInDetectionMode(): 
+            
+            img = cv.resize(img, faceDetector.getInputSize())
             
             tm.reset()    
-            tm.start()
+            tm.start()  # TODO :  can we have processingTime as member of FaceDetector ?
             isSuccesful, faces = faceDetector.detect(img) 
             tm.stop()
 
-            # Rem: isSuccesful can be true even when faces is None
-            if not isSuccesful or faces is None:
-                continue
-
+            # Rem: isSuccesful can be true even when faces is None        
+            if isSuccesful and faces is not None:  
+                                
+                if faceRecognition.isActive() and not detectionTraject.inFastMotion():
+                    print('Sending image to face recognition module.')
                     
-            if faceRecognition.isActive:
-                print('Sending image to face recognition module.')
-                
-                #Rem: detection output: faces is array[(faceNb,15)]: array of faceNb faces
-                # TODO:  devrais mettre cette fct dans une classe ??
-                face_imgs = fl.cropBoxes(img, faces[:,:4])   #recognizer.align() ?
+                    #Rem: detection output: faces is array[(faceNb,15)]: array of faceNb faces
+                    # TODO:  devrais mettre cette fct dans une classe ??
+                    face_imgs = fl.cropBoxes(img, faces[:,:4])   #recognizer.align() ?
 
-                # Put the face image in a (non-async) queue for face recognition
-                faceRecognition.putImgQueue(face_imgs)
-           
-          
-            select_idx = faceDetection.selectLargestFace(faces)   # TODO image class
+                    # Put the face image in a (non-async) queue for face recognition
+                    faceRecognition.putImgQueue(face_imgs)
             
-            # observedCenter from face detector is noisy and will be filtered in smoothCoord()
-            observedCenter = faceDetection.returnFaceCenter(faces, select_idx, 'rectCenter')  # TODO image_box
             
-            # TODO trajectory
-            faceCenterTraject.append(observedCenter)
-            observedTrajectTime.append(time.time())
-            
-            # TODO smoothCoord avec Kalman 
-            
-            #if 
-            #smoothCenter = filt.smoothCoord(observedCenter)
-            smoothCenter = observedCenter
-            
-            if ifVisualize:   
-                # TODO: re-organize the visualization modules AND the trajectory filtering modules
-                v.visualizeTraject_inDetection(faceDetection,
-                                               img, faces, smoothCenter,select_idx, tm, 
-                                               faceCenterTraject  )
-           
-            if  weSwitch2Tracking(faces, time.time() - modeStartTime, ifSwitch2Tracking) : 
-                assert faces is not None
-                face_to_track  = np.round(faces[select_idx,:4]).astype(np.int16) # [x,y,w,h]            
+                select_idx = faceDetection.selectLargestFace(faces)   # TODO image class
+                observedCenter = faceDetection.returnFaceCenter(faces, select_idx, 'rectCenter')  # TODO image_box
                 
+                detectionTraject.appendObs(observedCenter)
+                
+                if detectionTraject.isAtFirstStep(): 
+                    detectionTraject.filter.setKalmanInitialState(*observedCenter)
+                
+                detectionTraject.updateFilter()
+                
+                # TODO: re-organize the visualization modules AND the trajectory filtering modules
+                img =v.visualizeTraject_inDetection(faceDetection, detectionTraject.observations, 
+                                                    detectionTraject.filteredObs,
+                                                img, faces,select_idx, tm  )
+        
+            if  mode.isTimeToSwitchToTracking(faces): 
+                
+                face_to_track  = np.round(faces[select_idx,:4]).astype(np.int16) # [x,y,w,h]            
                 faceTracking.initTracker(img, face_to_track)
                 
                 if ifSaveVideo:   
                     fl.saveVideo(video) #TODO  VOIR SI CA MARCHE
-                                
-                mode = 'faceTracking'
-                lastCenter = smoothCenter #last filter prediction from detection
                 
-                # Initialize Kalman Filter for face tracking     
-                x0, y0 = smoothCenter[:2]
-                trackingFilter,filteredTraject=filt.initFiltering((x0, y0),
-                                                            'tracking')
-                modeStartTime = time.time() # to measure the time in faceTracking mode
-                faceCenterTraject   = [] # list of measurements/observations of face centers
-                observedTrajectTime = []
-
-                            
-        elif mode == 'faceTracking':
+                trackingTraject.reinit()  # Starting from the last filtered obs of detectionTraj              
+                          
+        elif mode.inTrackingMode(): 
             """  The faceTracking mode can only be access from the faceDetection mode 
-            Both faceTracking mode and faceDetection mode send face coordinates 
-            to the microcontroller for servo-tracking.
             """
             
-            tm.reset()
+            tm.reset() # to monitor tracking algo performance 
             tm.start()
             #isLocated, bbox, score = faceTracker.infer(img) # TODO
-            isLocated, faceTuple = faceTracker.update(img)
+            isSuccessful, faceTuple = faceTracker.update(img)
             score = faceTracker.getTrackingScore()
             tm.stop()
             
-            if not isLocated or (score < 0.5):      
-                # Switch back to face detection mode
-                print(f'''Target is lost: go back to face detection after 
-                      spending {modeStartTime - time.time()} s in face tracking mode.''')
-                mode ='faceDetection'
-                modeStartTime = time.time() # now measures the time in faceDetection mode
+            if not isSuccessful or (score < 0.5):      
+                mode.switchBackToDetection()    
                 continue
             
-            observedCenter_int16 = faceDetection.returnBoxCenter(faceTuple)  # np.int16
-            #print(observedCenter_int16)
+            observedCenter = faceDetection.returnBoxCenter(faceTuple)  # np.int16
+            # int16 has to be transformed into float32 for the kalman filter to work on it        
+            
+            trackingTraject.update(observedCenter)
+            '''
             observedCenter = np.array(observedCenter_int16, np.float32).reshape(2,1) # TODO: rester consistent dans le choix de type (float32 vs int16 etc)
             faceCenterTraject.append(observedCenter) #i.e. measurements.append(...)
             observedTrajectTime.append(time.time())
  
             #print(observedCenter.shape)  #(2,1)
             
+            
             #Kalman Filtering is used to smooth the observed trajectory of face centers
             filteredTraject = filt.updateFiltering(observedCenter,trackingFilter, 
                                                    filteredTraject)
             smoothCenter = filteredTraject[-1] 
 
-            if ifVisualize:
-                v.visualizeTraject_inTracking( img,faceTuple, smoothCenter,select_idx, tm, 
-                                                faceCenterTraject, filteredTraject)    
-                if ifSaveVideo:
-                    fl.saveVideo(video) #TODO  VOIR SI CA MARCHE
-                    continue 
-          
+            '''            
+            # TODO: reorganize the all visualization thing.
+            img = v.visualizeTraject_inTracking( faceTracking, trackingTraject.observations,
+                                                trackingTraject.filteredObs, 
+                                                img,faceTuple,score, tm)    
+            if ifSaveVideo:
+                fl.saveVideo(video) #TODO  VOIR SI CA MARCHE
+                continue 
+    
+        
+        if ifVisualize: 
+                cv.imshow('Video', img)
+        
+        # TODO ??
+        '''        
         if ifTrajectAcquisition:  
             acquisitionTime = 60 #[s]   1 min        
-            if time.time() - modeStartTime > acquisitionTime:
+            if time.time() - mode.startTime > acquisitionTime:
                 # Signal acquisition for state model estimation
-          
-                # TODO:  pass an object Trajectory as argument
-                fl.saveTraject(faceCenterTraject, observedTrajectTime, mode)
-                # Reset the face center trajectory
-                faceCenterTraject   = [] # Non-filtered observations
-                observedTrajectTime = [] # 
+      
+                # TODO pour a la fois detection que pour tracking
+                fl.saveTraject(detectionTraject, mode)         
+                detectionTraject.reinit()       
+        '''    
         
-            
         if ifSendData: 
-            isSent = uart.sendData(ser, smoothCenter)
+            isSent = uart.sendData(ser, Trajectory.lastSmoothPt[:2])
            
     cv.destroyAllWindows()
             

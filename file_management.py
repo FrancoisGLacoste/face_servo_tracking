@@ -12,6 +12,9 @@ from PIL import Image
 import imghdr
 import json 
 
+from trajectory import Trajectory
+
+
 # Finding the path of the base directory i.e path were this file is placed
 BASE_DIR = dirname(os.path.abspath(__file__))
 #BASE_DIR2 = '/home/moi1/Documents/dev_py/vision/PROJET_Face-Tracking-camera/'
@@ -41,17 +44,17 @@ class NpEncoder(json.JSONEncoder):
         else:
             return super(NpEncoder, self).default(obj)
    
-def saveTraject(faceCenterTraject, faceCenterTraject_t, mode):
+def saveTraject(traject:Trajectory, mode):
     n=1
     # If faceCenterTraject is long enough, we save it in JSON to represent
     # the non-filtered signal behavior in the case of each mode 
     # (detection mode and tracking mode)  
     traject_filename = join(BASE_DIR, f'faceCenterTraject_{n}_{mode}.json')
 
-    if len(faceCenterTraject) > 20:
+    if len(traject.observations) > 20:
         with open(traject_filename, 'w') as f:
-            data = {'coord': faceCenterTraject, 
-                    'time':faceCenterTraject_t}
+            data = {'coord': traject.observations, 
+                    'time':traject.observationsTime}
             json.dump(data, f, cls=NpEncoder)
  
   

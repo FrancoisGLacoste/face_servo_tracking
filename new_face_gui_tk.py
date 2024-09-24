@@ -1,10 +1,12 @@
 # -*- encoding: utf-8 -*-
 
+import time 
 import queue
 
 import cv2 as cv
 from PIL import Image, ImageTk 
 import tkinter as tk
+from tkinter import ttk
 from unidecode import unidecode  # To convert UTF-8 strings into ASCII. ex: 'françois' --> 'francois'
 
 import file_management as fl
@@ -20,14 +22,19 @@ def createGUI_tk(img, newFaceIdQueue: queue.Queue):
     imgMsg = 'Unidentified !!'                       # Text on the image    
     questionMsg = f"Please, identify this stranger ? (If you can't let it blank.)"
     answerMsg = f"The stranger name is"
-
-    label_font = 'Arial 11'
+    msgFont = 'Arial 11'
     
     # Create the root Tkinter window object
     root = tk.Tk()   
     root.geometry("600x344")   
     root.title(title)
     
+    style = ttk.Style()
+    style.configure('TButton', font=('Helvetica', 10))
+    style.configure('TLabel', font=('Helvetica', 12))
+    style.configure('TEntry', font=('Helvetica', 10))
+
+
     def close_window():
         root.destroy()
     
@@ -93,29 +100,29 @@ def createGUI_tk(img, newFaceIdQueue: queue.Queue):
        
     # Create a label and display the image
     img_tk = prepareImgTk(img)
-    label = tk.Label(root, image=img_tk)
+    label = ttk.Label(root, image=img_tk)  #label = tk.Label(root, image=img_tk)
     label.pack()
 
     # Create a label for the question
-    question_label = tk.Label(root, text=questionMsg, font = label_font)
+    question_label = ttk.Label(root, text=questionMsg, font = msgFont)
     question_label.pack( pady=5)
 
     # Create a frame for the entry widget and the button
-    entry_frame = tk.Frame(root)
+    entry_frame = ttk.Frame(root)
     entry_frame.pack()
 
     # Create an entry widget to capture user input
-    entry = tk.Entry(entry_frame)
+    entry = ttk.Entry(entry_frame)
     entry.pack(side=tk.LEFT )  
 
     # Create a submit button
-    submit_button = tk.Button(entry_frame, text="Enter", command=handle_user_input)
+    submit_button = ttk.Button(entry_frame, text="Enter", command=handle_user_input)
     submit_button.pack(side=tk.LEFT, padx=5)
 
     # Pressing the button change these message labels
-    message1_label = tk.Label(root, text="", font = label_font)
+    message1_label = ttk.Label(root, text="", font = msgFont)
     message1_label.pack()
-    message2_label = tk.Label(root, text="", font = label_font)
+    message2_label = ttk.Label(root, text="", font = msgFont)
     message2_label.pack()
 
     # Bind the Enter key to the handle_user_input function
@@ -123,4 +130,10 @@ def createGUI_tk(img, newFaceIdQueue: queue.Queue):
 
     # Tkinter event loop
     root.mainloop()
+
+
+
+# =================================================================================
+#   ALTERNATIVE  GUI  using tkk instead of tk ( likely less ugly)
+# =================================================================================
 
