@@ -67,7 +67,7 @@ class FaceDetection():
 
         TODO : documentation:  distinguer box & face
         Args:
-            faces (_type_): _description_
+            faces (Array): _description_
         """
         if faceArray is not None:
             w = faceArray[:,2]

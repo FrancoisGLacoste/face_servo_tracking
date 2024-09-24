@@ -4,6 +4,7 @@
 import time
 
 import numpy as np
+from numpy.linalg import norm 
 
 from filtering_oo import Filtering
 #import filtering_oo as filt    
@@ -19,7 +20,11 @@ class Trajectory:
         # Kalman Filtering is used to smooth the observed trajectory of face centers
         self.filter = Filtering(modeLabel, initPt) # Class for the Kalman Filter
         
-        self.reinit(initPt)                    
+        self.observations = list()   # faceCenterTraject   # = Filtering.measurements
+        self.filteredObs = list()                          # = Filtering.prediction 
+        self.observationsTime = list() 
+
+                  
 
         
     def setFormat(self,format):
@@ -34,14 +39,16 @@ class Trajectory:
                     i.e last predicted state and its predicted velocity 
                     If None, the class variable is used instead. 
         """
-        self.observations = list()   # faceCenterTraject   # = Filtering.measurements
-        self.filteredObs = list()                          # = Filtering.prediction 
+        self.observations = list()   
+        self.filteredObs = list()    
         self.observationsTime = list() 
 
         if lastPrediction is None : 
             lastPrediction = self.lastSmoothPt 
-        self.filter.setKalmanInitialState(*lastPrediction) # lastPrediction =x, y, vx, vy 
         
+        if lastPrediction is not None:     
+            self.filter.setKalmanInitialState(*lastPrediction) # lastPrediction =x, y, vx, vy 
+
 
       
     def appendObs(self, newObservation):
@@ -58,8 +65,11 @@ class Trajectory:
     def updateFilter(self):
               
         lastObservation = self.observations[-1]
+        #print(type(self.observations))
+        #print(lastObservation)
+        #print(type(lastObservation))
         self.filter.update(lastObservation)
-        self.filteredObs = self.filter.predictions.astype(self.trajectFormat)
+        self.filteredObs.append(self.filter.predictions[-1].astype(self.format))
         
         self.setLastPrediction()
         
@@ -78,3 +88,26 @@ class Trajectory:
     def getLastSmoothPt(self):
         """  Return  x, y from the last filtered observation (x,y,vx,vy)"""
         return self.filteredObs[-1][:2]
+    
+    def distance(self):
+        """ Return the l2 distance between the current point and the previous one."""
+        if len(self.observations) > 2:
+            diff = np.array(self.observations[-1]) - np.array(self.observations[-2]) # array 
+            return norm(diff.astype(np.float32),ord=2)
+        else: 
+            return 0
+    
+    def velocity(self):
+        if len(self.observations) > 2:    
+            velocityArray = self.filteredObs[-1][2:4]
+            return norm(velocityArray.astype(np.float32),ord=2)
+        else: 
+            return 0
+                
+    def acceleration(self):
+        if len(self.observations) > 2:   
+            #print(self.filteredObs[-1][2:4]) 
+            diff = np.array(self.filteredObs[-1][2:4]) - np.array(self.filteredObs[-2][2:4]) 
+            return norm(diff.astype(np.float32),ord=2)
+        else: 
+            return 0            

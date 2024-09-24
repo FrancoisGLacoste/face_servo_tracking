@@ -117,14 +117,13 @@ def showTraj(measurements, predictions):
 
 
 # =============     For Face Detection ============================================
-def visualizeTraject_inDetection(faceDetection, #: FaceDetection,
-                                 faceCenterTraject,smoothCenterTraj,#detectionTraject: Trajectory,
+def visualizeTraject_inDetection(faceCenterTraject,smoothCenterTraj,#detectionTraject: Trajectory,
                                  img,faces, select_idx, tm):
     # Rem: output img can be written into a video (videoWrite) 
     
     #faceCenterTraject = detectionTraject.observations
-    #smoothCenterraj = detectionTraject.filteredObs
-    img = visualizeDetection(img, faces, smoothCenterTraj,select_idx, tm)
+    #smoothCenterraj = detectionTraject.filteredObs    # list of tuples
+    img = visualizeDetection(img, faces, smoothCenterTraj[-1][:2],select_idx, tm)
     img = visualizeTraject(img, faceCenterTraject)
     #cv.imshow('Video', img)
     return img
@@ -145,8 +144,9 @@ def visualizeDetection(img, faceArray,faceCenter, select_id, tm,verbose=False ):
     selectFace_thick = 4
     selectFace_color = GREEN
 
+
     if faceArray is not None: 
-        x_center, y_center = faceCenter
+        x_center, y_center = faceCenter.reshape(2,) # array (2,1)
         
         faceNb = np.size(faceArray,0) 
         if verbose:
@@ -169,7 +169,10 @@ def visualizeDetection(img, faceArray,faceCenter, select_id, tm,verbose=False ):
             # Specific to the selected face
             if idx == select_id: 
                 # The face center is displayed only for the selected face
-                captionText = ', center = ({:.0f}, {:.0f}).'.format(x_center, y_center)
+                #print(type(x_center))  # np.int16
+                
+                captionText = f", center = {x_center}, {y_center}"
+                #captionText = ', center = ({:.0f}, {:.0f}).'.format(x_center, y_center)
                 cv.circle(img, (x_center, y_center), 4, selectFace_color, selectFace_thick)
                 boxThickness = selectFace_thick
                 boxColor = selectFace_color
@@ -199,8 +202,7 @@ def visualizeDetection(img, faceArray,faceCenter, select_id, tm,verbose=False ):
 
 
 # ================ For Face Tracking =====================================================
-def visualizeTraject_inTracking(faceTracking, #: FaceTracking,
-                                faceCenterTraject, filteredTraject,
+def visualizeTraject_inTracking(faceCenterTraject, filteredTraject,
                                 img,faceTuple,score, tm):
 
     #faceCenterTraject = trackingTraject.observations

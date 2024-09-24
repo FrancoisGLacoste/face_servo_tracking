@@ -45,13 +45,13 @@ def face_servo_tracking(faceRecognition : FaceRecognition):
     if ifSendData: ser = uart.initUART()
     
     select_idx =  None
-    
+    faceIndex =0
     
     # mode: 'faceDetection' OR 'faceTracking 
     # When a face is selected during faceDetection, then faceTracking 
     #                                               is activated after a short laps of time.
     mode = Mode('faceDetection')
-
+   
     
     while video.isOpened():
         isActive, img = video.read()
@@ -73,12 +73,43 @@ def face_servo_tracking(faceRecognition : FaceRecognition):
             tm.reset()    
             tm.start()  # TODO :  can we have processingTime as member of FaceDetector ?
             isSuccesful, faces = faceDetector.detect(img) 
+            #print(type(faces)) # array(1,15)
             tm.stop()
 
             # Rem: isSuccesful can be true even when faces is None        
             if isSuccesful and faces is not None:  
+                   
+          
+                select_idx = faceDetection.selectLargestFace(faces)   # TODO image class
+                observedCenter = faceDetection.returnFaceCenter(faces, select_idx, 'rectCenter')  # TODO image_box
+                    
+                detectionTraject.appendObs(observedCenter)
+                if detectionTraject.isAtFirstStep(): 
+                    detectionTraject.filter.setKalmanInitialState(*observedCenter)
+                detectionTraject.updateFilter()
+                
+                # TODO: re-organize the visualization modules AND the trajectory filtering modules
+                img =v.visualizeTraject_inDetection(detectionTraject.observations, 
+                                                    detectionTraject.filteredObs,
+                                                img, faces,select_idx, tm  )
+
+                #Compter les images de face capturees: 
+                faceIndex =+1
+                # On veut comparer la courante face avec la precedente face: centre, select_idx
+                # Etudier la continuite des centres et des faceName dans la trajectoire. 
+                nearPreviousFace  = (detectionTraject.distance() < 6)  
+                likelyTheSameFace = bool(  np.mod(faceIndex+1,5 )) and nearPreviousFace  
+            
+                #if previousFace.name
+                #print('l2 distance:', detectionTraject.distance())
+                # Le probleme sera davantage de detecter un saut d'une face a une autre.
+                
+                condition = faceRecognition.isActive()              \
+                    and (faceIndex ==1 or not likelyTheSameFace )   \
+                    and not detectionTraject.inFastMotion()        
+                      
                                 
-                if faceRecognition.isActive() and not detectionTraject.inFastMotion():
+                if condition:
                     print('Sending image to face recognition module.')
                     
                     #Rem: detection output: faces is array[(faceNb,15)]: array of faceNb faces
@@ -87,36 +118,20 @@ def face_servo_tracking(faceRecognition : FaceRecognition):
 
                     # Put the face image in a (non-async) queue for face recognition
                     faceRecognition.putImgQueue(face_imgs)
+                
             
-            
-                select_idx = faceDetection.selectLargestFace(faces)   # TODO image class
-                observedCenter = faceDetection.returnFaceCenter(faces, select_idx, 'rectCenter')  # TODO image_box
-                
-                detectionTraject.appendObs(observedCenter)
-                
-                if detectionTraject.isAtFirstStep(): 
-                    detectionTraject.filter.setKalmanInitialState(*observedCenter)
-                
-                detectionTraject.updateFilter()
-                
-                # TODO: re-organize the visualization modules AND the trajectory filtering modules
-                img =v.visualizeTraject_inDetection(faceDetection, detectionTraject.observations, 
-                                                    detectionTraject.filteredObs,
-                                                img, faces,select_idx, tm  )
-        
+
             if  mode.isTimeToSwitchToTracking(faces): 
                 
                 face_to_track  = np.round(faces[select_idx,:4]).astype(np.int16) # [x,y,w,h]            
                 faceTracking.initTracker(img, face_to_track)
                 
-                if ifSaveVideo:   
-                    fl.saveVideo(video) #TODO  VOIR SI CA MARCHE
+                #if ifSaveVideo:   
+                #    fl.saveVideo(video) #TODO  VOIR SI CA MARCHE
                 
                 trackingTraject.reinit()  # Starting from the last filtered obs of detectionTraj              
                           
-        elif mode.inTrackingMode(): 
-            """  The faceTracking mode can only be access from the faceDetection mode 
-            """
+        elif mode.isInTrackingMode(): 
             
             tm.reset() # to monitor tracking algo performance 
             tm.start()
@@ -148,7 +163,7 @@ def face_servo_tracking(faceRecognition : FaceRecognition):
 
             '''            
             # TODO: reorganize the all visualization thing.
-            img = v.visualizeTraject_inTracking( faceTracking, trackingTraject.observations,
+            img = v.visualizeTraject_inTracking(trackingTraject.observations,
                                                 trackingTraject.filteredObs, 
                                                 img,faceTuple,score, tm)    
             if ifSaveVideo:

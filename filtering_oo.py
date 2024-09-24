@@ -41,7 +41,7 @@ class Filtering:
             x0, y0 = initPt
             self.setKalmanInitialState(x0, y0)
         else: 
-            print('''The kalman filter for trajectory in mode={modeLabel} has been created, 
+            print(f'''The kalman filter for trajectory in mode={modeLabel} has been created, 
                   but no initial point has been set yet. ''')
         #return  kalmanFilter, predictions
         
@@ -188,7 +188,7 @@ class Filtering:
         #return predictions
     
 
-    def _convertInFloat32(newMeasurement):
+    def _convertInFloat32(self, newMeasurement):
         # TODO: rester consistent dans le choix de type (float32 vs int16 etc)
         # int16 has to be transformed into float32 for the kalman filter to work on it        
         return np.array(newMeasurement, np.float32).reshape(2,1) 
