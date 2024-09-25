@@ -16,6 +16,7 @@ class FaceDetection():
             nms_threshold :   Suppress bounding boxes of iou >= nms_threshold.
             top_k = 5000  :   Keep top_k bounding boxes before NMS.
         """    
+        self.step = 0
         self.score_threshold= score_threshold
         self.nms_threshold  = nms_threshold
         self.top_k = top_k
@@ -144,7 +145,8 @@ class FaceDetection():
         
         return None
             
-
+    def _incrementStep(self):
+        self.step +=1
         
     # TODO ***** ??    
     def increaseBox(self,box):  

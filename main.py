@@ -7,7 +7,6 @@ from face_recognition_SFace_oo import FaceRecognition
 from face_servo_tracking_oo import face_servo_tracking
 from face_servo_tracking_oo import test_face_servo_tracking_1, test_retrieve_results_1
 
-
 async def main():   
     
     # Create a FaceRecognition object, including input/result queues

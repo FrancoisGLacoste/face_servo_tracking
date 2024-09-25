@@ -16,6 +16,7 @@ class Trajectory:
     
     def __init__(self, modeLabel, initPt=None):
         self.format = np.int16 # To be changed according to servo-control code in the microcontroller
+        self.modeLabel = modeLabel
         
         # Kalman Filtering is used to smooth the observed trajectory of face centers
         self.filter = Filtering(modeLabel, initPt) # Class for the Kalman Filter
@@ -25,7 +26,8 @@ class Trajectory:
         self.observationsTime = list() 
 
                   
-
+    def getMode(self):
+        return self.modeLabel
         
     def setFormat(self,format):
         self.format = format

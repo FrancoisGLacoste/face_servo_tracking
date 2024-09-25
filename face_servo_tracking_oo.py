@@ -11,8 +11,11 @@ from face_detection_yunet_oo import FaceDetection
 from visual_tracking_oo import FaceTracking
 from face_recognition_SFace_oo import FaceRecognition
 from trajectory import Trajectory
+#import visualization
+from image import Image
 from mode import Mode
 import uart                     # Custom module using pyserial for serial communication
+
 import visualization as v    
 import file_management as fl    
 
@@ -32,6 +35,7 @@ def face_servo_tracking(faceRecognition : FaceRecognition):
     tm = cv.TickMeter() 
         
     video = cv.VideoCapture(0)
+    imgDisplay = Image()
     
     faceDetection = FaceDetection(video)
     faceDetector = faceDetection.detector
@@ -45,13 +49,13 @@ def face_servo_tracking(faceRecognition : FaceRecognition):
     if ifSendData: ser = uart.initUART()
     
     select_idx =  None
-    faceIndex =0
+    detectionStep =0
     
     # mode: 'faceDetection' OR 'faceTracking 
     # When a face is selected during faceDetection, then faceTracking 
     #                                               is activated after a short laps of time.
     mode = Mode('faceDetection')
-   
+    
     
     while video.isOpened():
         isActive, img = video.read()
@@ -70,16 +74,18 @@ def face_servo_tracking(faceRecognition : FaceRecognition):
             
             img = cv.resize(img, faceDetector.getInputSize())
             
+            imgDisplay.setNewFrame(img)
+            
+            
             tm.reset()    
             tm.start()  # TODO :  can we have processingTime as member of FaceDetector ?
             isSuccesful, faces = faceDetector.detect(img) 
             #print(type(faces)) # array(1,15)
             tm.stop()
-
-            # Rem: isSuccesful can be true even when faces is None        
+           
+            
             if isSuccesful and faces is not None:  
-                   
-          
+                faceDetection._incrementStep()
                 select_idx = faceDetection.selectLargestFace(faces)   # TODO image class
                 observedCenter = faceDetection.returnFaceCenter(faces, select_idx, 'rectCenter')  # TODO image_box
                     
@@ -88,26 +94,28 @@ def face_servo_tracking(faceRecognition : FaceRecognition):
                     detectionTraject.filter.setKalmanInitialState(*observedCenter)
                 detectionTraject.updateFilter()
                 
-                # TODO: re-organize the visualization modules AND the trajectory filtering modules
-                img =v.visualizeTraject_inDetection(detectionTraject.observations, 
-                                                    detectionTraject.filteredObs,
-                                                img, faces,select_idx, tm  )
-
-                #Compter les images de face capturees: 
-                faceIndex =+1
-                # On veut comparer la courante face avec la precedente face: centre, select_idx
-                # Etudier la continuite des centres et des faceName dans la trajectoire. 
-                nearPreviousFace  = (detectionTraject.distance() < 6)  
-                likelyTheSameFace = bool(  np.mod(faceIndex+1,5 )) and nearPreviousFace  
+                imgDisplay.visualize(detectionTraject, faces, tm, None, select_idx )
             
-                #if previousFace.name
-                #print('l2 distance:', detectionTraject.distance())
-                # Le probleme sera davantage de detecter un saut d'une face a une autre.
+
+                #------ ??? DEVRAIS-JE CREER UNE NOUVELLE CLASSE 'Face' (ou kekchose du genre) 
+                # On veut comparer la courante face avec la precedente face: centre, select_idx
+                # Parfois j'ai [francois, francois, unrecognized, francois,...]
+                # Ou pire: [francois, francois, audrey, francois,...]
+                # On veut se baser sur la continuite des centres des images pour conclure 
+                # a la continuite des faceName 
+                # (c-a-d que ci-haut, audrey et unrecognized devraient etre francois)
+                # Mais ca s'infere seulement a posteriori. On peut pas deviner sur le champs !
+                nearPreviousFace  = (detectionTraject.distance() < 6)  
+                likelyTheSameFace = bool(  np.mod(faceDetection.step+1,5 )) and nearPreviousFace  
+
+                # Le probleme sera aussi de detecter un saut d'une face a une autre quand il y 
+                # en a plus d'une.... 
+                # Et on voudra ne permettre le saut qu'a certaines conditions. 
                 
                 condition = faceRecognition.isActive()              \
-                    and (faceIndex ==1 or not likelyTheSameFace )   \
+                    and (detectionStep ==1 or not likelyTheSameFace )   \
                     and not detectionTraject.inFastMotion()        
-                      
+                #------------      
                                 
                 if condition:
                     print('Sending image to face recognition module.')
@@ -147,34 +155,21 @@ def face_servo_tracking(faceRecognition : FaceRecognition):
             observedCenter = faceDetection.returnBoxCenter(faceTuple)  # np.int16
             # int16 has to be transformed into float32 for the kalman filter to work on it        
             
-            trackingTraject.update(observedCenter)
-            '''
-            observedCenter = np.array(observedCenter_int16, np.float32).reshape(2,1) # TODO: rester consistent dans le choix de type (float32 vs int16 etc)
-            faceCenterTraject.append(observedCenter) #i.e. measurements.append(...)
-            observedTrajectTime.append(time.time())
- 
-            #print(observedCenter.shape)  #(2,1)
+            trackingTraject.appendObs(observedCenter)
+            trackingTraject.updateFilter()
             
             
-            #Kalman Filtering is used to smooth the observed trajectory of face centers
-            filteredTraject = filt.updateFiltering(observedCenter,trackingFilter, 
-                                                   filteredTraject)
-            smoothCenter = filteredTraject[-1] 
-
-            '''            
-            # TODO: reorganize the all visualization thing.
-            img = v.visualizeTraject_inTracking(trackingTraject.observations,
-                                                trackingTraject.filteredObs, 
-                                                img,faceTuple,score, tm)    
+            imgDisplay.visualize(trackingTraject, faces, tm, score )      
+        
             if ifSaveVideo:
                 fl.saveVideo(video) #TODO  VOIR SI CA MARCHE
                 continue 
     
         
-        if ifVisualize: 
-                cv.imshow('Video', img)
+        if imgDisplay.ifVisualize: 
+                imgDisplay.show()#cv.imshow('Video', imgDisplay)
         
-        # TODO ??
+        # TODO UTILE ou non ??
         '''        
         if ifTrajectAcquisition:  
             acquisitionTime = 60 #[s]   1 min        

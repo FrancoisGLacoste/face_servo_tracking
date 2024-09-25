@@ -104,6 +104,12 @@ class FaceRecognition:
         self.inputQueue.put(img)
       
     async def runFaceRecognitionTask(self):
+        """ *** This loop should have a high priority by comparison with 
+        the retrieveResults() loop that ask the user to identify the unrecognized face 
+        through the GUI. 
+        This loop should continue to run while the retrieveResults loop is waiting for a 
+        response for the user... 
+        """
         print('we arrive in runFaceRecognitionTask')
         while True:
             # Receive a face image from the face detection loop
@@ -352,28 +358,40 @@ class FaceRecognition:
         has the best predicted_proba      
         """
         newFace_features = self.recognizer.feature(newFaceImg) # X
-               
-        # i.e. {metric : (faceName, predict_proba) for metric in [l2,cosine]}  
-        predict_proba = { metric:  self.predict_kNNClf(newFace_features, metric ) 
-                            for metric in ['l2', 'cosine']
-                        } 
-    
-        faceNames_proba_list = list(predict_proba.values()) # [(faceName0, proba0), (faceName0, proba0)]
-        print(faceNames_proba_list)
         
-        # faceName such that proba is max in [(faceName_l2, proba_l2), (faceName_cos, proba_cos)]
-        (faceName, faceName_prob), index = u.argmax_tupls(faceNames_proba_list )
-        metric = ['l2', 'cosine'][index] # metric giving the best result above 
+        try:        
+            # i.e. {metric : (faceName, predict_proba) for metric in [l2,cosine]}  
+            predict_proba = { metric:  self.predict_kNNClf(newFace_features, metric ) 
+                                for metric in ['l2', 'cosine']
+                            } 
         
-        print(f'We recognize the face of {faceName} with prob={faceName_prob}')
+            faceNames_proba_list = list(predict_proba.values()) # [(faceName0, proba0), (faceName0, proba0)]
+            print(faceNames_proba_list)
+            
+            # faceName such that proba is max in [(faceName_l2, proba_l2), (faceName_cos, proba_cos)]
+            (faceName, faceName_prob), index = u.argmax_tupls(faceNames_proba_list )
+            metric = ['l2', 'cosine'][index] # metric giving the best result above 
+            
+            print(f'We recognize the face of {faceName} with prob={faceName_prob}')
+            
+            # False if unrecognized, according to the distance threshold criterion
+            if not self.isRecognized(newFace_features,faceName,metric):
+                print('Finally the face is classified as unrecognized.')
+                return 'unrecognized', None
+            print(f'Cassified as recognized: {faceName} ')   
+        except IndexError as ie: 
+            print('in recognizerFace', ie)
+            faceName = 'unrecognized'
+            faceName_prob = 1
+        except Exception as e:
+            print(e)
+            faceName = 'unrecognized'
+            faceName_prob = 1
+              
+        finally: 
+            return faceName, faceName_prob
+             
         
-        # False if unrecognized, according to the distance threshold criterion
-        if not self.isRecognized(newFace_features,faceName,metric):
-            print('Finally the face is classified as unrecognized.')
-            return 'unrecognized', None
-        print(f'Cassified as recognized: {faceName} ')    
-        return faceName, faceName_prob
-    
         
     def trainKNNClfs(self,X, y):
         """  Trains k-nearest-neighbors classifiers
@@ -469,8 +487,8 @@ class FaceRecognition:
             for name in self.faceEmbeddingsDict.keys():
                 centroid =  self.centroidsDict[name]
                 X_n = self.faceEmbeddingsDict[name]
-                print(type(centroid))
-                print(centroid.shape)
+                #print(type(centroid))
+                #print(centroid.shape)
                 distrib = sorted([distFct(centroid,x) for x in X_n])
                 self.discreteDistribDict[dist][name] = distrib
                 
@@ -548,7 +566,6 @@ class FaceRecognition:
                                     reverse=True)
       
         predicted_index, pred_proba = predictions_sorted[0]               
-        
         return self.faceNames[predicted_index], pred_proba 
 
     def testModel_kNNClf(self, X_test, y_test, clf_metric):

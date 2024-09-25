@@ -21,6 +21,8 @@ MAGENTA=(255, 0, 255)
 CYAN = (255,255,0)
 BLACK = (0,0,0)
 
+
+# =========================================================================
 # TODO  :  BETTER ORGANIZE, CLEAN   etc 
 #  An IDEA:  
 #   the fonctions:   visualizeTraject_inDetection  &  visualizeTraject_inTracking 
@@ -33,9 +35,9 @@ BLACK = (0,0,0)
 # ================  for filtered trajectories ===================================
 
        
-def visualizeTraject(img, trajectory, color=GREEN):
+def visualizeTraject(img, listOfPts, color=GREEN):
     """
-    Draw the trajectory of the non-filtered face center coordinates upon the video frame image,
+    Draw the trajectory( listOfPts) of the non-filtered face center coordinates upon the video frame image,
     Args:
         img :_type_: image, frame from the video
         faceCenterTraject :list of (int16,int16) coordinates: 
@@ -45,7 +47,7 @@ def visualizeTraject(img, trajectory, color=GREEN):
         _type_: image from the video with an additional trajectory drawn upon it
     """
     try:
-        for p in trajectory:
+        for p in listOfPts:
             x = int(np.round(p[0]))
             y = int(np.round(p[1]))
             cv.circle(img, (x,y), 1, color, 1)
@@ -55,79 +57,18 @@ def visualizeTraject(img, trajectory, color=GREEN):
         return img
 
 
-
-def plotTraject(x,y, t, x_label = "t     [seconds]" ):
-    fig, axs = plt.subplots(2)#(figsize=(10, 6))
-    fig.suptitle('Fitting face trajectory in tracking mode')
-    #axs[0].plot(t, x)
-    #axs[1].plot(t, y)
-    #ax.set_title("Kalman Filter in 2D Motion Estimation")
-    
-    for n,z in enumerate([x,y]):
-        axs[n].scatter(t, z, c='red', s=1, label=f"Noisy Observations in {z}")
-    #ax.plot(predictions[:, 0], predictions[:, 1], 'b-', label="Kalman Filter Estimation")
-    axs[1].set_xlabel(x_label)
-    #ax.set_ylabel("x")
-    #ax.set_xlim(0, 10)
-    #ax.set_ylim(-1.5, 1.5)
-    #ax.legend()
-
-
-    #----
-    fig, ax = plt.subplots(figsize=(10, 6))
-    fig.suptitle('Fitting face trajectory in tracking mode')
-    #ax.plot(t, x)   
-    ax.scatter(t, x, c='red', s=1, label=f"Noisy Observations in x")
-    ax.set_xlabel(x_label)
-    #----
-
-    plt.show() 
-
-# -------------
-def showTraj(measurements, predictions):
-    measurements = np.array(measurements).squeeze()
-    predictions = np.array(predictions)
-    predictions = predictions.squeeze()
-
-    # sample number
-    nb =predictions[:, 0].shape[0]  
-    
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.set_xlim(0, 700)
-    ax.set_ylim(250, 450)
-    ax.set_title("Kalman Filter in 2D Motion Estimation")
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
-                
-    # Plotting the noisy measurements and Kalman filter estimations
-    ax.scatter(measurements[:, 0], 
-                measurements[:, 1], 
-                c='red', s=10, label="Noisy Measurements")
-    ax.plot(predictions[:, 0].reshape((nb,1)), 
-            predictions[:, 1].reshape((nb,1)),
-            'b-', label="Kalman Filter Estimation")
-    
-    #ax.scatter(predictions[:, 0].reshape((nb,1)), 
-    #    predictions[:, 1].reshape((nb,1)), 
-    #    c='blue', s=10, label="Kalman Filter Estimation")
-
-    ax.legend()        
-    plt.show() 
-
-
-
 # =============     For Face Detection ============================================
-def visualizeTraject_inDetection(faceCenterTraject,smoothCenterTraj,#detectionTraject: Trajectory,
+'''def visualizeTraject_inDetection(faceCenterTraject,filteredTraject,#detectionTraject: Trajectory,
                                  img,faces, select_idx, tm):
     # Rem: output img can be written into a video (videoWrite) 
-    
     #faceCenterTraject = detectionTraject.observations
     #smoothCenterraj = detectionTraject.filteredObs    # list of tuples
-    img = visualizeDetection(img, faces, smoothCenterTraj[-1][:2],select_idx, tm)
-    img = visualizeTraject(img, faceCenterTraject)
+    img = visualizeDetection(img, faces, filteredTraject[-1][:2],select_idx, tm)
+    img = visualizeTraject(img, faceCenterTraject, GREEN)
+    img = visualizeTraject(img, filteredTraject, BLUE)
     #cv.imshow('Video', img)
     return img
-
+'''
 
 def visualizeDetection(img, faceArray,faceCenter, select_id, tm,verbose=False ):
     
@@ -202,19 +143,18 @@ def visualizeDetection(img, faceArray,faceCenter, select_id, tm,verbose=False ):
 
 
 # ================ For Face Tracking =====================================================
-def visualizeTraject_inTracking(faceCenterTraject, filteredTraject,
+'''def visualizeTraject_inTracking(faceCenterTraject, filteredTraject,
                                 img,faceTuple,score, tm):
 
     #faceCenterTraject = trackingTraject.observations
     #filteredTraject = trackingTraject.filteredObs
     smoothCenter = filteredTraject[-1]
-
     img = visualizeTracking(img, faceTuple, smoothCenter[:2], score, tm)
     img = visualizeTraject(img, faceCenterTraject, GREEN)
     img = visualizeTraject(img, filteredTraject, BLUE)
     #cv.imshow('Video', img)
     return img
-   
+ '''  
 def visualizeTracking(image, bbox, smoothCenter, score, tm, name=None):
    
     
@@ -258,3 +198,67 @@ def visualizeTracking(image, bbox, smoothCenter, score, tm, name=None):
     cv.putText(output, 'Target lost!', (text_x, text_y), cv.FONT_HERSHEY_SIMPLEX, fontScale, (0, 0, 255), fontSize)
     '''
     return output   
+
+    
+# ==================================================================
+
+def plotTraject(x,y, t, x_label = "t     [seconds]" ):
+    fig, axs = plt.subplots(2)#(figsize=(10, 6))
+    fig.suptitle('Fitting face trajectory in tracking mode')
+    #axs[0].plot(t, x)
+    #axs[1].plot(t, y)
+    #ax.set_title("Kalman Filter in 2D Motion Estimation")
+    
+    for n,z in enumerate([x,y]):
+        axs[n].scatter(t, z, c='red', s=1, label=f"Noisy Observations in {z}")
+    #ax.plot(predictions[:, 0], predictions[:, 1], 'b-', label="Kalman Filter Estimation")
+    axs[1].set_xlabel(x_label)
+    #ax.set_ylabel("x")
+    #ax.set_xlim(0, 10)
+    #ax.set_ylim(-1.5, 1.5)
+    #ax.legend()
+
+
+    #----
+    fig, ax = plt.subplots(figsize=(10, 6))
+    fig.suptitle('Fitting face trajectory in tracking mode')
+    #ax.plot(t, x)   
+    ax.scatter(t, x, c='red', s=1, label=f"Noisy Observations in x")
+    ax.set_xlabel(x_label)
+    #----
+
+    plt.show() 
+
+# -------------
+def showTraj(measurements, predictions):
+    measurements = np.array(measurements).squeeze()
+    predictions = np.array(predictions)
+    predictions = predictions.squeeze()
+
+    # sample number
+    nb =predictions[:, 0].shape[0]  
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.set_xlim(0, 700)
+    ax.set_ylim(250, 450)
+    ax.set_title("Kalman Filter in 2D Motion Estimation")
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+                
+    # Plotting the noisy measurements and Kalman filter estimations
+    ax.scatter(measurements[:, 0], 
+                measurements[:, 1], 
+                c='red', s=10, label="Noisy Measurements")
+    ax.plot(predictions[:, 0].reshape((nb,1)), 
+            predictions[:, 1].reshape((nb,1)),
+            'b-', label="Kalman Filter Estimation")
+    
+    #ax.scatter(predictions[:, 0].reshape((nb,1)), 
+    #    predictions[:, 1].reshape((nb,1)), 
+    #    c='blue', s=10, label="Kalman Filter Estimation")
+
+    ax.legend()        
+    plt.show() 
+
+
+    
