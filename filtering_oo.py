@@ -16,9 +16,9 @@ import visualization as v
  https://docs.opencv.org/4.x/dd/d6a/classcv_1_1KalmanFilter.html
 
 """
-
  
 class Filtering:
+    lastPrediction =None      # Class variable, accessible from any instance
     
     def __init__(self, modeLabel, initPt=None ):
         """ modeLabel   :  string in ['detection', 'tracking']
@@ -37,13 +37,13 @@ class Filtering:
         R, q_x, q_v, dt, a, b = self._returnKalmanParam(modeLabel)
         self.kalman = self._createKalmanFilter(R, q_x, q_v, dt, a, b)  
          
-        if initPt is not None:        
-            x0, y0 = initPt
-            self.setKalmanInitialState(x0, y0)
+        if initPt is not None or Filtering.lastPrediction is not None:        
+            self.setKalmanInitialState(*initPt) # initPt = (x0,y0) 
+            
         else: 
             print(f'''The kalman filter for trajectory in mode={modeLabel} has been created, 
                   but no initial point has been set yet. ''')
-        #return  kalmanFilter, predictions
+            
         
     def _returnKalmanParam(self, mode):
         """_summary_
@@ -144,7 +144,6 @@ class Filtering:
 
         # Define measurement noise covariance
         kalman.measurementNoiseCov = R.astype(np.float32)
-        
        
         """  Explanation:
         Posterior Error Covariance. updated error covariance after incorporating the measurement. 
@@ -164,13 +163,18 @@ class Filtering:
         
         Prior Error Covariance. predicted error covariance before incorporating the measurement. 
         It is calculated during the prediction step.
-        """#kalman.errorCovPre = np.eye(4, dtype=np.float32) *0.05
-        
+        """
+        #kalman.errorCovPre = np.eye(4, dtype=np.float32) *0.05
         return kalman
+    
         
-    def setKalmanInitialState(self, x0, y0, vx0=0, vy0=0):
-                
-        # Define initial state estimate and initial estimate error covariance
+    def setKalmanInitialState(self, x0=None, y0=None, vx0=0, vy0=0):
+        """Define initial state estimate"""
+        if x0 is None and y0 is None :
+            if Filtering.lastPrediction is not None: 
+                x0, y0, vx0, vy0 = Filtering.lastPrediction         
+            else: 
+                print('The Kalman Filter cannot be instantiated. An initial state is missing.')
         initialState=np.array([x0, y0, vx0, vy0], np.float32).reshape(-1, 1)
         self.kalman.statePre = initialState
         self.kalman.statePost = initialState.copy()
@@ -185,8 +189,8 @@ class Filtering:
         self.kalman.correct(newMeasurement) # 
         self.predictions.append(prediction.copy())   # list of arrays of shape (4,2,1)
         self.measurements.append(newMeasurement)
-        #return predictions
-    
+        self.setLastPrediction(prediction)
+        
 
     def _convertInFloat32(self, newMeasurement):
         # TODO: rester consistent dans le choix de type (float32 vs int16 etc)
@@ -228,6 +232,15 @@ class Filtering:
                     'tracking': R_track}
         return measurCov
 
+    # ------- class methods ( by contrast with instance methods)-----------------------
+    def setLastPrediction(self, prediction):
+        Filtering.lastPrediction = prediction
+        #print(Filtering.lastPrediction)
+        
+    def getLastPrediction(self):
+        return Filtering.lastPrediction
+    
+        
 # ==========  Estimation of the noise covariance to use in the Kalman filter ==================
 
 #-------sans sklearn ni statsmodels ----------

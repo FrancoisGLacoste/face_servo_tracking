@@ -4,8 +4,8 @@ import asyncio
 import multiprocessing as mp
 
 from face_recognition_SFace_oo import FaceRecognition
-from face_servo_tracking_oo import face_servo_tracking
-from face_servo_tracking_oo import test_face_servo_tracking_1, test_retrieve_results_1
+from camera_loop_oo import camera_loop
+from camera_loop_oo import test_camera_loop_1, test_retrieve_results_1
 
 async def main():   
     
@@ -14,7 +14,7 @@ async def main():
     faceRecognition.prepareFaceRecognition() # compute features, train the kNN classifier, save that.
        
     # Create the (CPU-bound) process for the servo-tracking of faces
-    camera_process = mp.Process(target=face_servo_tracking, 
+    camera_process = mp.Process(target=camera_loop, 
                            args=(faceRecognition,) )
     camera_process.start()
      
@@ -28,7 +28,7 @@ async def main():
     camera_process.join()
     
     
-    
+# =========================================================================================    
 async def test_main_async_process():
     """ Test 1 
         To test the asyncio/process/threads structure
@@ -38,7 +38,7 @@ async def test_main_async_process():
     faceRecognition.test_runTask 
     """
     faceRecognition = FaceRecognition() 
-    camera_process = mp.Process(target=test_face_servo_tracking_1, 
+    camera_process = mp.Process(target=test_camera_loop_1, 
                            args=(faceRecognition,))
     camera_process.start()
     await asyncio.gather(

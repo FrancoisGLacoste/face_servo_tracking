@@ -16,6 +16,7 @@ class FaceDetection():
             nms_threshold :   Suppress bounding boxes of iou >= nms_threshold.
             top_k = 5000  :   Keep top_k bounding boxes before NMS.
         """    
+        self.tm = cv.TickMeter() # To measure computation times
         self.step = 0
         self.score_threshold= score_threshold
         self.nms_threshold  = nms_threshold
@@ -24,6 +25,7 @@ class FaceDetection():
         self.modelPath = YUNET_DETECTION_PATH
         
         self.detector =  self._createFaceDetector_yunet()
+        self.isSuccessful = False
         
         # withVideo=True when it is a video and not an image that can be of variable size
         if isinstance(video,cv.VideoCapture): 
@@ -52,7 +54,7 @@ class FaceDetection():
     def setVideoInputSize(self):
         # When we process a video, not an image: 
         # we set the input size right after the detector creation
-        scaleFactor = 1.2 
+        scaleFactor = 1#1.2 
         if isinstance(self.video,cv.VideoCapture):  
             imgWidth = int(self.video.get(cv.CAP_PROP_FRAME_WIDTH)* scaleFactor)
             imgHeight = int(self.video.get(cv.CAP_PROP_FRAME_HEIGHT)* scaleFactor)
@@ -62,6 +64,15 @@ class FaceDetection():
             print('''It is not a video capture. We cannot adjust the input size yet 
                   since not all images have same size. ''')
                     
+    
+    def detect(self, img):
+                    
+        self.tm.reset()    
+        self.tm.start()  # TODO :  can we have processingTime as member of FaceDetector ?
+        self.isSuccessful, faces = self.detector.detect(img) 
+        #print(type(faces)) # array(1,15)
+        self.tm.stop()
+        return faces
                     
     def selectLargestFace(self,faceArray):
         """returns the index of the largest face box (in surface width*height)
@@ -99,7 +110,7 @@ class FaceDetection():
     #TODO : etre certain d'ajuster pour les types (kalman a besoin de np.float32, mais qu' 
     # envoie-t-on au microcontroleur ? 
     # Je pensais envoyer int16, mais si on controle les servos par microseconde, 
-    # il est peut-etre mieux de choisir des float32 ?)
+    # il est peut-etre mieux de choisir des float32 et de discretiser seulement dans le controleur?)
     
     def returnBoxCenter(self,box):
         """ Return the center of the box (rectangle enclosing the selected item/face)

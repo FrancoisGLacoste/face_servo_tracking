@@ -7,7 +7,7 @@ import time
 
 class Mode:
     # Constant parameters: 
-    minTimeInDetectionMode = 60 # [s]  in UTC time 
+    minTimeInDetectionMode = 10 # [s]  in UTC time 
 
     def __init__(self,modeLabel):
         if 'detection' in modeLabel.lower():
@@ -47,7 +47,7 @@ class Mode:
         return self.modeLabel  
     
     def getModeTime(self):
-        print('Time elapsed in detection mode:', time.time() - self.startTime)
+        print('Time elapsed in the current mode:', time.time() - self.startTime)
         return time.time() - self.startTime  
     
     def isInDetectionMode(self):

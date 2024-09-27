@@ -17,7 +17,7 @@ class Image:
         self.img =newImg.copy()
         
     def visualize(self, traject: Trajectory, faces, tm, score=None, select_idx =None ):
-        filteredCenter = traject.filteredObs[-1][:2]   
+        filteredCenter = traject.smoothObs[-1][:2]   
         
         img = self.img   
         # --------  in detection -------------------------------------
@@ -25,12 +25,12 @@ class Image:
             img = v.visualizeDetection(img, faces, filteredCenter,select_idx, tm)
 
         # --------in tracking-------------------
-        if traject.getMode =='tracking':    # faces = faceTuple
+        if traject.getMode() =='tracking':    # faces = faceTuple
             img = v.visualizeTracking(img, faces, filteredCenter, score, tm)
 
 
         img = v.visualizeTraject(img, traject.observations,GREEN)
-        img = v.visualizeTraject(img, traject.filteredObs, BLUE)
+        img = v.visualizeTraject(img, traject.smoothObs, BLUE)
         #cv.imshow('Video', img)
         #return img
         self.img = img
