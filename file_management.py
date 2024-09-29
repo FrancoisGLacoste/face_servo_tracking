@@ -228,25 +228,6 @@ def giveNewFilepath(face_name, id=None):
     return join(name_dir, filename)    
      
      
-def cropBoxes(img, boxes, inGray=False):  
-    """ 
-    Arg: 
-        img:   np.ndarray         a single image
-        boxes: np.ndarray([:,:4]) or np.ndarray([:,:15]) : array of boxes, i.e. coords (x,y,w,h), e.g of the faces.
-    Returns:    list of  images contained by the boxes, (gray if asked) 
-    
-    
-    REM: SFace model has a method alignCrop(image, face_box)
-    """
-    #print(boxes[0]) # valid both for lists and arrays
-    if boxes is None or len(boxes.squeeze())==0: 
-        print('No box to crop from the image')
-        return []
-    if inGray : img= cv.cvtColor(img, cv.COLOR_BGR2GRAY)  
-    
-    return [img[y:y+h,x:x+w] for (x,y,w,h) in boxes[:,:4].astype(int)]
-      
-    
 def count(name_dir):
     return len(listdir(name_dir) ) 
 

@@ -3,11 +3,13 @@
 import numpy as np
 import cv2 as cv
 
-import os,sys,time
+#import os,sys,time
 
 from file_management import YUNET_DETECTION_PATH
 import file_management as fl
-
+from trajectory import Trajectory
+from face_recognition_SFace_oo import FaceRecognition
+ 
 class FaceDetection():
     algoName = 'yunet' 
     def __init__(self, video=None, score_threshold=0.65, nms_threshold = 0.3, top_k = 5000):
@@ -156,10 +158,39 @@ class FaceDetection():
         
         return None
             
-    def _incrementStep(self):
+    
+            
+    # =======================================================================================
+                
+    def recognitionCondition(self,detectionTraject: Trajectory, 
+                                  faceRecognition: FaceRecognition):   
+        
         self.step +=1
         
-    # TODO ***** ??    
+                 
+        #------ ??? DEVRAIS-JE CREER UNE NOUVELLE CLASSE 'Face' (ou kekchose du genre) 
+        # On veut comparer la courante face avec la precedente face: centre, select_idx
+        # Parfois j'ai [francois, francois, unrecognized, francois,...]
+        # Ou pire: [francois, francois, audrey, francois,...]
+        # On veut se baser sur la continuite des centres des images pour conclure 
+        # a la continuite des faceName 
+        # (c-a-d que ci-haut, audrey et unrecognized devraient etre francois)
+        # Mais ca s'infere seulement a posteriori. On peut pas deviner sur le champs !
+        nearPreviousFace  = (detectionTraject.distance() < 6)  
+        likelyTheSameFace = bool(  np.mod(self.step+1,5 )) and nearPreviousFace  
+
+        # Le probleme sera aussi de detecter un saut d'une face a une autre quand il y 
+        # en a plus d'une.... 
+        # Et on voudra ne permettre le saut qu'a certaines conditions. 
+        
+        condition = faceRecognition.isActive()              \
+            and (self.step ==1 or not likelyTheSameFace )   \
+            and not detectionTraject.inFastMotion()        
+          
+        return condition
+       
+    
+    # TODO ***** ??=======================================================================    
     def increaseBox(self,box):  
         # Because when detecting in image we must adjust the scaling for each image
         x, y, w, h = box 
@@ -172,6 +203,8 @@ class FaceDetection():
             new_box_list.append(self.increaseBox(box))
         return new_box_list
         
+        
+    # =======================================================================================    
     def detectFacesFromFile(self,face_name ='unknowns', number=-1):
         """  Each photo apriori has different size, which is not the video's one,"""
         # List of new images with non-extracted faces from directory face_name+'_new'

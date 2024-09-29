@@ -57,14 +57,14 @@ def camera_loop(faceRecognition : FaceRecognition):
         
         if mode.isInDetectionMode(): 
             
-            print(img.shape)
-            img = cv.resize(img, faceDetection.detector.getInputSize())
-            print(img.shape)   # (576, 768, 3)
+            #print(img.shape) # (480, 640, 3)
+            #img = cv.resize(img, faceDetection.detector.getInputSize())
+            #print(img.shape)   # (480, 640, 3)   , (576, 768, 3)
             imgDisplay.setNewFrame(img)
             faces = faceDetection.detect(img)
             
             if faceDetection.isSuccessful and faces is not None:  
-                faceDetection._incrementStep()   # TODO: hid it , but where ?
+                
                 select_idx = faceDetection.selectLargestFace(faces)   # TODO ? Face class
                 observedCenter = faceDetection.returnFaceCenter(faces, select_idx, 'rectCenter')  # TODO image_box
                     
@@ -73,50 +73,17 @@ def camera_loop(faceRecognition : FaceRecognition):
                     detectionTraject.filter.setKalmanInitialState(*observedCenter)
                 detectionTraject.updateFilter()
                 
-                tm = faceDetection.tm
-                imgDisplay.visualize(detectionTraject, faces, tm, None, select_idx )
-            
-
-                #------ ??? DEVRAIS-JE CREER UNE NOUVELLE CLASSE 'Face' (ou kekchose du genre) 
-                # On veut comparer la courante face avec la precedente face: centre, select_idx
-                # Parfois j'ai [francois, francois, unrecognized, francois,...]
-                # Ou pire: [francois, francois, audrey, francois,...]
-                # On veut se baser sur la continuite des centres des images pour conclure 
-                # a la continuite des faceName 
-                # (c-a-d que ci-haut, audrey et unrecognized devraient etre francois)
-                # Mais ca s'infere seulement a posteriori. On peut pas deviner sur le champs !
-                nearPreviousFace  = (detectionTraject.distance() < 6)  
-                likelyTheSameFace = bool(  np.mod(faceDetection.step+1,5 )) and nearPreviousFace  
-
-                # Le probleme sera aussi de detecter un saut d'une face a une autre quand il y 
-                # en a plus d'une.... 
-                # Et on voudra ne permettre le saut qu'a certaines conditions. 
-                
-                condition =False 
-                ''' faceRecognition.isActive()              \
-                    and (detectionStep ==1 or not likelyTheSameFace )   \
-                    and not detectionTraject.inFastMotion()        
-                #------------    '''  
-                                
-                if condition:
-                    print('Sending image to face recognition module.')
-                    
-                    #Rem: detection output: faces is array[(faceNb,15)]: array of faceNb faces
-                    # TODO:  devrais mettre cette fct dans une classe ??
-                    face_imgs = fl.cropBoxes(img, faces[:,:4])   
-                    '''recognizer.alignCrop(src_img: cv2.typing.MatLike, face_box: cv2.typing.MatLike, aligned_img: cv2.typing.MatLike | None = ...) -> cv2.typing.MatLike: ...
-                        
-                        recognizer.alignCrop( src_img: UMat, face_box: UMat, aligned_img: UMat | None = ...) -> UMat: ...
-                    '''
-                    # Put the face image in a (non-async) queue for face recognition
-                    faceRecognition.putImgQueue(face_imgs)
+                # TODO: "visualize" functions still require refactoring ***********
+                imgDisplay.visualize(detectionTraject, faces, faceDetection.tm, None, select_idx )
+                             
+                if faceDetection.recognitionCondition(detectionTraject,faceRecognition):
+                    faceRecognition.sendToFaceRecognition(img, faces[:,:4])
                 
             
 
             if  mode.isTimeToSwitchToTracking(faces): 
-                print(img.shape)
+                #print(img.shape) #(480, 640, 3)
                 faceTracking.initTracker(img, faces[select_idx,:4])                
-                print(img.shape)
                 trackingTraject.reinit()  # Starting from the last filtered obs of detectionTraj              
                           
         elif mode.isInTrackingMode(): 
@@ -124,7 +91,8 @@ def camera_loop(faceRecognition : FaceRecognition):
             imgDisplay.setNewFrame(img)
             faces = faceTracking.track(img)
             if not faceTracking.isSuccessful or (faceTracking.score < 0.5):      
-                mode.switchBackToDetection()    
+                mode.switchBackToDetection()   
+                trackingTraject.reinit() 
                 continue
             
             observedCenter = faceDetection.returnBoxCenter(faces)  # np.int16        
@@ -142,13 +110,10 @@ def camera_loop(faceRecognition : FaceRecognition):
         if ifSaveVideo:   
             fl.saveVideo(video) #TODO  VOIR SI CA MARCHE
 
-        
         if ifSendData: 
-            isSent = uart.sendData(Trajectory.lastSmoothPt[:2])
-           
+            isSent = uart.sendData(Trajectory.lastSmoothPt[:2])   
     cv.destroyAllWindows()
             
-
 # ========================  Test ============ ======================================
 def test_camera_loop_1(faceRecognition):
     while True:

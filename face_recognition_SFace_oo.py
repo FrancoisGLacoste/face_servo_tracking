@@ -96,13 +96,49 @@ class FaceRecognition:
         if not self.afterNewFaceId():
             return self._isActive  
         
-    # ================== For the execution of face recognition loop ===============    
+            
+    
+    def cropBoxes(self,img, boxes, inGray=False):  
+        """ 
+        Arg: 
+            img:   np.ndarray         a single image
+            boxes: np.ndarray([:,:4]) or np.ndarray([:,:15]) : array of boxes, i.e. coords (x,y,w,h), e.g of the faces.
+        Returns:    list of  images contained by the boxes, (gray if asked) 
+        
+        
+        REM: SFace model has a method alignCrop(image, face_box)
+        """
+        #print(boxes[0]) # valid both for lists and arrays
+        if boxes is None or len(boxes.squeeze())==0: 
+            print('No box to crop from the image')
+            return []
+        if inGray : img= cv.cvtColor(img, cv.COLOR_BGR2GRAY)  
+        
+        return [img[y:y+h,x:x+w] for (x,y,w,h) in boxes[:,:4].astype(int)]
+            
+    def sendToFaceRecognition(self, img, faces ):
+        """ 
+        img  :    UMap, cv2.typing.MatLike or np.array : the whole camera frame (image)
+        faces:    np.array [:,:4] :  a sequence of boxes, one box for each face    """
+        #Rem: detection output: faces is array[(faceNb,15)]: array of faceNb faces
+        # TODO:  devrais mettre cette fct dans une classe ??
+        face_imgs = self.cropBoxes(img, faces)   
+        '''recognizer.alignCrop(src_img: cv2.typing.MatLike, face_box: cv2.typing.MatLike, aligned_img: cv2.typing.MatLike | None = ...) -> cv2.typing.MatLike: ...
+            
+            recognizer.alignCrop(src_img: UMat,               face_box: UMat,               aligned_img: UMat               | None = ...) -> UMat: ...
+        '''
+        print('Sending image to face recognition module.')
+        # Put the face image in a (non-async) queue for face recognition
+        self.putImgQueue(face_imgs)    
+    
+
     def putImgQueue(self, img):
         """ Put the face image in the queue for face recognition. 
         The image will show up in runFaceRecognitionTask()        
         """
         self.inputQueue.put(img)
-      
+
+    # ================== For the execution of face recognition loop ===============          
     async def runFaceRecognitionTask(self):
         """ *** This loop should have a high priority by comparison with 
         the retrieveResults() loop that ask the user to identify the unrecognized face 
