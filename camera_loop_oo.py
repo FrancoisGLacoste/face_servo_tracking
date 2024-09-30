@@ -28,15 +28,16 @@ def camera_loop(faceRecognition : FaceRecognition):
     video = cv.VideoCapture(0)
     imgDisplay = Image()
     
-    faceDetection = FaceDetection(video)
+    faceDetection = FaceDetection(video) # including shared_memory for image transfer 
     detectionTraject = Trajectory('detection') # including a Kalman filter
     faceTracking = FaceTracking()
     trackingTraject = Trajectory('tracking')  # including a Kalman filter
       
+
+    
     if ifSendData: uart = UART() # Serial communication with microcontroller
     
     select_idx =  None
-    detectionStep =0
     
     # mode: 'faceDetection' OR 'faceTracking 
     # When a face is selected during faceDetection, then faceTracking 
@@ -58,7 +59,7 @@ def camera_loop(faceRecognition : FaceRecognition):
         if mode.isInDetectionMode(): 
             
             #print(img.shape) # (480, 640, 3)
-            #img = cv.resize(img, faceDetection.detector.getInputSize())
+            #img = cv.resize(img, )
             #print(img.shape)   # (480, 640, 3)   , (576, 768, 3)
             imgDisplay.setNewFrame(img)
             faces = faceDetection.detect(img)
@@ -77,9 +78,8 @@ def camera_loop(faceRecognition : FaceRecognition):
                 imgDisplay.visualize(detectionTraject, faces, faceDetection.tm, None, select_idx )
                              
                 if faceDetection.recognitionCondition(detectionTraject,faceRecognition):
-                    faceRecognition.sendToFaceRecognition(img, faces[:,:4])
-                
-            
+                    faceRecognition.sendToFaceRecognition_v1(img, faces[:,:4])
+                    #faceDetection.sendToFaceRecognition_v2(img, faces[:,:4], faceRecognition)
 
             if  mode.isTimeToSwitchToTracking(faces): 
                 #print(img.shape) #(480, 640, 3)
