@@ -11,7 +11,6 @@ async def main():
     
     # Create a FaceRecognition object, including input/result queues
     faceRecognition = FaceRecognition() 
-    faceRecognition.prepareFaceRecognition() # compute features, train the kNN classifier, save that.
        
     # Create the (CPU-bound) process for the servo-tracking of faces
     camera_process = mp.Process(target=camera_loop, 
