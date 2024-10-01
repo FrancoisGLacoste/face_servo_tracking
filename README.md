@@ -5,7 +5,7 @@ Works so -so.
 Still issues regarding:
 
 - Performance (serious lag because of image transfer via mp.queue)
-It is being addressed by using mp.shared_memory with mp.queue for image metadata.
+It is being addressed in the development branch by using mp.shared_memory with mp.queue for image metadata.
 
 - Need to send the recognition result back to imgDisplay where the visualization takes place.
 A possibility is to use mp.Queue, another is to use mp.Manager() .
