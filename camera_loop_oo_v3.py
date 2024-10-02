@@ -29,9 +29,6 @@ def camera_loop(imgTransfer: ImgTransfer, resultQueue: Queue):
     ifSaveVideo = False 
      
     video = cv.VideoCapture(0)
-    frame = faceDetection.video  #  TODO  ?? Can we know video size without reading video.read() 
-    imgTransfer.createShareMemory(frame.nbytes) # shared_memory for image transfer 
-
     imgDisplay = Image(resultQueue)
     
     faceDetection = FaceDetection(video) 
@@ -39,6 +36,9 @@ def camera_loop(imgTransfer: ImgTransfer, resultQueue: Queue):
     faceTracking = FaceTracking()
     trackingTraject = Trajectory('tracking')  # including a Kalman filter
       
+    frameSize = faceDetection.frameSize  # sould be = frame.nbytes
+    imgTransfer.createShareMemory(frameSize) # shared_memory for image transfer 
+  
 
     
     if ifSendData: uart = UART() # Serial communication with microcontroller

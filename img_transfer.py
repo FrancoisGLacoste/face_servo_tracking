@@ -23,9 +23,11 @@ class ImgTransfer:
         self._existing_shm =None # In the process of retrieveImage
             
     def createShareMemory(self, imgSize=None):
+        """  
+        Arg: 
+            imgSize:    ( similar to image_data.nbytes  )
+        """
         try:
-            #imgSize #image_data.nbytes
-            
             self._shm = shared_memory.SharedMemory(create=True, size=imgSize)
         except Exception as e:
             print(e)        
@@ -41,7 +43,7 @@ class ImgTransfer:
             shm = shared_memory.SharedMemory(create=True, size=self.imgSize)
             '''
             np_array = np.ndarray(img.shape, 
-                                dtype=img.dtype, 
+                                dtype=img.dtype, # OpenCV uses uint8 for image data
                                 buffer=self._shm.buf)
             np.copyto(np_array, img)
             print(f'The data (img) have been copied in the shared memory.')
