@@ -13,6 +13,15 @@ import numpy as np
 from file_management import BASE_DIR
 import file_management as fl
 
+
+"""  ====================== SFACE ======================================= 
+SFace : [Zhonyu2021] a state-of-the-art algorithm for face recognition
+Ref:
+https://github.com/zhongyy/SFace/blob/main/SFace_torch/train_SFace_torch.py
+https://github.com/opencv/opencv/blob/4.x/samples/dnn/face_detect.py#L99
+
+======================================================================="""
+ 
 class SFaceEmbeddings:
     
     def __init__(self, faceNames):

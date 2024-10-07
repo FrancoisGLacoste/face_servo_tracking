@@ -121,11 +121,13 @@ def visualizeDetection(img, faceArray,faceCenter, select_id, tm, faceName, certa
                 boxColor = selectFace_color
             
             cv.rectangle(img, (x, y), (x+w, y+h),boxColor, boxThickness)
-            cv.circle(img, (x_eye1,y_eye1), 2, RED, thickness)
+            cv.circle(img, (x_center, y_center), RED, thickness)
+            '''cv.circle(img, (x_eye1,y_eye1), 2, RED, thickness)
             cv.circle(img, (x_eye2,y_eye2), 2, BLUE, thickness)
             cv.circle(img, (x_nose,y_nose), 2, CYAN, thickness)
             cv.circle(img, (x_mouth1,y_mouth1), 2, MAGENTA, thickness)
             cv.circle(img, (x_mouth2,y_mouth2), 2, YELLOW, thickness)            
+            '''
             try:
                 cv.putText(img,
                         ('Face {}: surface = {:.0f}, score = {:.2f}'

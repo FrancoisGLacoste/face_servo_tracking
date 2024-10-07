@@ -111,6 +111,7 @@ class Trajectory:
         """ We need trajectory data to calibrate the Kalman Filter (noise parameters etc)"""
         return False
     
+    '''
     def acquisition(self, startTime):
         # **** TODO: PENSER A CE QUE L'ON VOUDRAIT FAIRE ICI ***
         acquisitionTime = 60 #[s]   1 min        
@@ -120,4 +121,4 @@ class Trajectory:
             # TODO pour a la fois detection que pour tracking
             #fl.saveTraject(detectionTraject, mode)         
             self.reinit()       
-        
+     '''   

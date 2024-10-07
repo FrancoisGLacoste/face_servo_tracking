@@ -3,73 +3,31 @@
 """
 face_recognition_SFace_oo_v3.py    version with shared_memory
 """
-import os, time 
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
+import time 
 import queue as qu
-
-#To transfer image: either mp.queue or mp.shared_memory 
+import asyncio
 import multiprocessing as mp
 
 import cv2 as cv
 import numpy as np
 
 from img_transfer import ImgTransfer
+from result_transfer import ResultTransfer
 import new_face_gui_tk as gui
 from sface_embeddings import SFaceEmbeddings
 from knn_classifier import KnnClassifier
 from unrecognition_criteria import UnrecognitionCriteria
 import file_management as fl
 import util as u
-
-"""  ====================== SFACE ======================================= 
-SFace : [Zhonyu2021] a state-of-the-art algorithm for face recognition
-Ref:
-https://github.com/zhongyy/SFace/blob/main/SFace_torch/train_SFace_torch.py
-https://github.com/opencv/opencv/blob/4.x/samples/dnn/face_detect.py#L99
-
-======================================================================="""
-# ================== For the execution of face recognition loop ===============          
-def faceRecognitionLoop(imgTransfer: ImgTransfer, resultQueue: mp.Queue):
-    """ 
-    """
-    # Create a FaceRecognition object, including input/result queues
-    faceRecognition = FaceRecognition() 
-    print('We just create the faceRecognition object in faceRecognitionLoop')
-    
-    while True:
-        # Receive a face image from the face detection loop
-        print('We are receiving the last face image that has been detected.')
-        img, boxes =imgTransfer.retrieveImage()   
-        print('We got a new face image for the face recognition task to process.')
-        
-        # Face recognition per se 
-        faceImgs = faceRecognition.cropBoxes(img, boxes)    
-        results=list()
-        for faceImg in faceImgs:            
-            recognizedName, certainty = faceRecognition.recognizeFace(faceImg)
-            results.append((faceImg, recognizedName, certainty))
-            index = '?'
-            resultQueue.put([index, recognizedName, certainty])
-            # Transfer the results to imgDisplay via a mp.queue or via mp.Manager
-            # TODO How to synchronize the display of recognizedName and certainty on the video frame ?
-            # ? Est-ce je devrais pas numeroter les frames (un index) pour nous assurer de 
-            # retourner les resultats a la bonne image ?
-        
-        '''# Put the result in the result queue: the result is sent to retrieveResults()
-        await self.resultQueue.put(results) 
-        #TODO For now it is sent via a queue, but it should 
-        # eventually be connected via TCP/IP to a remote client that runs a GUI for the user.  
-        '''
-        
+       
 class FaceRecognition:
     
-    def __init__(self , isActive = True, faceNames= None):
+    def __init__(self , isActive = True):
         self._isActive = isActive  
-        self.faceNames = self.returnFaceNames(faceNames) # face names we want to recognize
+        self.faceNames = self.returnFaceNames() # face names we want to recognize
          
          
-        #self.resultQueue # voir imgTransfer()
+        #self.resultTransfer # voir imgTransfer()
         #asyncio.Queue() # Queue for capturing the recognition results (i.e. face names)
                     
         if self._isActive:
@@ -79,7 +37,8 @@ class FaceRecognition:
             self.unrecognitionCriteria = UnrecognitionCriteria(self.sFace,self.faceNames)    
              
             # ------------------ For new face identification  --------------------------------------
-            self.newFaceIdThread = ThreadPoolExecutor(max_workers=1) # Thread for running newFaceId 
+            #self.newFaceIdThread = ThreadPoolExecutor(max_workers=1) # Thread for running newFaceId 
+            
             # Queue for moving a new face identity (faceName) from  newFaceIdGUI
             self.newFaceIdQueue = qu.Queue() 
             self.newFaceIdGUI = None # Only created when required for new face identification
@@ -138,7 +97,7 @@ class FaceRecognition:
         while True:
             try:
                 print('Awaiting for result in retrieveResults')
-                result = await self.resultQueue.get()
+                result = await self.resultTransfer.get()
                 print(f"Result received")
                            
                 for img,name,_ in result:
@@ -160,7 +119,7 @@ class FaceRecognition:
                 print(f"Error in run() function: {e}")
                 # Notify the queue that the task is done
             finally:
-                self.resultQueue.task_done()
+                self.resultTransfer.task_done()  #TODO  ??? VERIFICATION ??
 
     async def processNewFaceId(self): # Receive infos from GUI for id of unrecognized faces
     
@@ -198,6 +157,7 @@ class FaceRecognition:
             return fl.listFaceNames() # ex: ['audrey', 'francois', 'victor', ']
         except Exception as e:
             print(e)
+        
     # =============================================================================================
     def recognizeFace(self, newFaceImg):
         """ 
@@ -228,8 +188,8 @@ class FaceRecognition:
             recognized =self.unrecognitionCriteria.isRecognized # boolean function
             if not recognized(newFace_features,faceName,metric):
                 print('Finally the face is classified as unrecognized.')
-                return 'unrecognized', None
-            print(f'Cassified as recognized: {faceName} ')   
+                return f'unrecognized, (maybe {faceName} ?)', None
+            print(f'Classified as recognized: {faceName} ')   
         except IndexError as ie: 
             print('in recognizerFace', ie)
             faceName = 'unrecognized'
@@ -254,7 +214,7 @@ class FaceRecognition:
         
             result = 'stranger' # faceImg
             print(f"Task is done: result: {result}")
-            await self.resultQueue.put(result) 
+            await self.resultTransfer.put(result) 
 
 
 
