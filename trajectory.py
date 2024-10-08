@@ -76,13 +76,16 @@ class Trajectory:
     def inFastMotion(self):   # TODO
         return False     
 
-    def getLastSmoothPt(self):
+    def getLastSmoothPt(self, withVelocity=True):
         """  Return  x, y from the last filtered observation (x,y,vx,vy)"""
         # The difference is only  np.int16  vs  np.float32
         #print(self.smoothObs[-1][:2] )
         #print(Filtering.lastPrediction )
-        return self.smoothObs[-1][:2]
-    
+        if withVelocity:
+            return self.smoothObs[-1][:4]
+        else:
+            return self.smoothObs[-1][:2]
+             
     def distance(self):
         """ Return the l2 distance between the current point and the previous one."""
         if len(self.observations) > 2:

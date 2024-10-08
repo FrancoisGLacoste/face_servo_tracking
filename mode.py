@@ -17,10 +17,14 @@ class Mode:
         self.startTime = time.time()     # for current UTC time in sec.
  
     def isTimeToSwitchToTracking(self, faces):
-        """determine when the mode switches from faceDetection mode to faceTracking mode
+        """Determine when the mode switches from faceDetection mode to faceTracking mode
+        Arg: 
+            faces : list of Face objects
         """
         if faces is None: 
             return False
+        
+        # TODO implement a more sophisticated condition based on faces
         
         # Stay in detection mode for at least {minTimeInDetectionMode} [ms]
         if self.getModeTime() < self.minTimeInDetectionMode:

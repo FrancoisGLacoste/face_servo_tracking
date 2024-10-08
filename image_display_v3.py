@@ -4,13 +4,25 @@
 """  
 image_display_v3.py
 """
+
+import cv2 as cv
+
 from trajectory import Trajectory
+from img_transfer import ImgTransfer
 from result_transfer import ResultTransfer
 
-import visualization as v
-from visualization import GREEN, BLUE
 
+import visualization_v3 as v
+from visualization_v3 import GREEN, BLUE
 
+# TODO : in this class: 
+#        Using ImgTransfer retrieve the frame, face objects ( in dictionary or serialized form) 
+#        Using ResultTransfer, retrieve (recognizedName, certainty)
+#        Pay attention to the frame identifier
+#        This class is between ImgTransfer, ResultTransfer and  the tornado VideoStreamHandler
+#        annotate the frames with the other informations to display, and transform them in jpg
+#        It is used in the frame generator that serves VideoStreamHandler
+            
 class ImageDisplay:
     
     def __init__(self, ifVisualize=True):
@@ -18,12 +30,13 @@ class ImageDisplay:
         self.img =None
         self.resultEvent =None
  
-    #TODO ? Useful or not       
+    '''#TODO ? Useful or not       
     def setNewFrame(self, newImg):
         self.img =newImg.copy()
+    '''
  
- 
-    # TODO  profundly refactor ...       
+    # TODO  rewrite entierely ...       
+    '''
     def visualize(self, resultTransfer: ResultTransfer, traject: Trajectory, 
                   faces, tm, score=None, select_idx =None ):
         filteredCenter = traject.smoothObs[-1][:2]   
@@ -48,5 +61,4 @@ class ImageDisplay:
         #return img
         self.img = img
 
-
-    
+    '''    

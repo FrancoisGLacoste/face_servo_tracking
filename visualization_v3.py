@@ -70,14 +70,14 @@ def visualizeTraject(img, listOfPts, color=GREEN):
     return img
 '''
 
-def visualizeDetection(img, faceArray,faceCenter, select_id, tm, faceName, certainty,verbose=False ):
+def visualizeDetection(img, faceArray,faceCenter, select_id, tm, faceName, recogCertainty,verbose=False ):
     
     """
     We show the face center only for the selected face (select_id). 
     The selected face is emphasized: it is the one that is tracked by the servos
     
     """
-    print((faceName, certainty))   # TODO A AJOUTER sur la video
+    #print((faceName, recogCertainty))   # TODO A AJOUTER sur la video  
     
     fps =  tm.getFPS()  # apriori not the same as cv.CAP_PROP_FPS
     detectTime = tm.getTimeMilli()

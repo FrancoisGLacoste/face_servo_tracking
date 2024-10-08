@@ -7,6 +7,7 @@ import cv2 as cv
 
 from file_management import YUNET_DETECTION_PATH
 import file_management as fl
+from faces import Face
 from trajectory import Trajectory
 from face_recognition_SFace_oo import FaceRecognition
  
@@ -18,27 +19,31 @@ class FaceDetection():
             nms_threshold :   Suppress bounding boxes of iou >= nms_threshold.
             top_k = 5000  :   Keep top_k bounding boxes before NMS.
         """    
+        
+        # Parameters of the Yunet detector
         self.tm = cv.TickMeter() # To measure computation times
         self.step = 0
         self.score_threshold= score_threshold
         self.nms_threshold  = nms_threshold
         self.top_k = top_k
-        
         self.modelPath = YUNET_DETECTION_PATH
         
         self.detector =  self._createFaceDetector_yunet()
         self.isSuccessful = False
         
+        # Set dimensions and size ( bytes) of the frames to detect
         if isinstance(video,cv.VideoCapture): 
-            #video = video
             (self.imgWidth, self.imgHeight), self.frameSize = self.returnFrameSize(video)
-            self.detector.setInputSize([self.imgWidth, self.imgHeight])()
-                    
-        self.faces =[]        # list of detected face boxes   
+            self.detector.setInputSize([int(self.imgWidth), int(self.imgHeight)])
+        else:
+            self.imgWidth, self.imgHeight, self.frameSize   = None,None,None
+            print(f'No video , width, height and size are set to None.')
+                     
+  
 
     def _createFaceDetector_yunet(self):
         """ 
-        .
+         Factory that returns Yunet detector objects
         """
         faceDetector = cv.FaceDetectorYN.create(
             self.modelPath,
@@ -53,35 +58,44 @@ class FaceDetection():
     def returnFrameSize(self, video: cv.VideoCapture):
         scaleFactor =1 
         try:  
-            imgWidth = self.video.get(cv.CAP_PROP_FRAME_WIDTH)* scaleFactor
-            imgHeight = self.video.get(cv.CAP_PROP_FRAME_HEIGHT)* scaleFactor
+            imgWidth = video.get(cv.CAP_PROP_FRAME_WIDTH)* scaleFactor
+            imgHeight = video.get(cv.CAP_PROP_FRAME_HEIGHT)* scaleFactor
             channels = 3 # assuming GBR
             frameSize = int(imgWidth) * int(imgHeight) * channels
             
-        except: 
-            print('''It is not a video capture. We cannot adjust the input size yet 
-                  since not all images have same size. ''')
             return (imgWidth, imgHeight), frameSize
-        
-        '''    
-        def setVideoInputSize(self):
-        # When we process a video, not an image: 
-        # we set the input size right after the detector creation
-        (imgWidth, imgHeight),_  = self.returnFrameSize(self.video)
-        
-        print('Input size has been adjust to the video.')
-        '''                  
-    
+        except Exception as e: 
+            print(f'Error: {e}')
+                      
+    # ===================================================================================
     def detect(self, img):
-                    
+        """ 
+        Returns: list of Face objects (not necessarily in order of size )
+        """            
         self.tm.reset()    
         self.tm.start()  # TODO :  can we have processingTime as member of FaceDetector ?
-        self.isSuccessful, faces = self.detector.detect(img) 
-        #print(type(faces)) # array(1,15)
+        self.isSuccessful, facesArray = self.detector.detect(img) 
         self.tm.stop()
+        
+        faces = self.createFaceObjectList(self, facesArray)   
+        activeFaceIndex = self.selectLargestFaceIndex(self, facesArray)
+        return faces, activeFaceIndex
+    
+    
+    # ===================================================================================
+    
+    def createFaceObjectList(self, facesArray):    
+        faces = list()
+        frameId = self.step
+        for faceArray in facesArray:
+            score = faceArray[-1]
+            coords = faceArray[:-1]   # transform in .astype(np.int32)  only when visualization              
+            x,y,w,h,x_eye1,y_eye1,x_eye2,y_eye2,x_nose,y_nose,x_mouth1,y_mouth1,x_mouth2,y_mouth2 = coords
+            faces.append(Face(frameId, (x,y,w,h), score, self.tm))
         return faces
-                    
-    def selectLargestFace(self,faceArray):
+    
+            
+    def selectLargestFaceIndex(self, faceArray):
         """returns the index of the largest face box (in surface width*height)
 
         TODO : documentation:  distinguer box & face
@@ -94,77 +108,8 @@ class FaceDetection():
             return np.argmax(w*h, 0) 
         return 0    
 
-
-    def _convertTuple_into_int16(self, tupl):
-        """
-        Converts of tuple of numbers (e.g. float) into a tuple of 16-bit integers. 
-        
-        Rem:  for np.ndarray, it is simpler to use .astype(np.int16)     
-        
-        tupl:  a tuple of number, float or int of more than 16-bits
-        
-        returns: 
-            A tuple of round number casted into 16 bits integers
-            
-        """
-        roundTupl = tuple(round(x) for x in tupl)
-        
-        # Each value is converted to a 16-bit integer using the bitwise & operator 
-        # with a 0xFFFF mask that removes the high bits.
-        return tuple(int(x) & 0xFFFF for x in roundTupl)
-        
-
-    #TODO : etre certain d'ajuster pour les types (kalman a besoin de np.float32, mais qu' 
-    # envoie-t-on au microcontroleur ? 
-    # Je pensais envoyer int16, mais si on controle les servos par microseconde, 
-    # il est peut-etre mieux de choisir des float32 et de discretiser seulement dans le controleur?)
-    
-    def returnBoxCenter(self,box):
-        """ Return the center of the box (rectangle enclosing the selected item/face)
-        in 16 bits
-
-        Args:
-            box : np.ndarray [x,y,w,h] OR tuple (x,y,w,h): selected face to track
-
-        Returns:
-            tuple (np.int16, np.int16): Center (x,y) of the box
-        """
-        x, y, w, h =  box
-        if isinstance(box, np.ndarray): 
-            return (np.round((x + w//2)).astype(np.int16), 
-                    np.round((y + h//2)).astype(np.int16) 
-                )
-        elif isinstance(box, tuple):
-            return self._convertTuple_into_int16( (x + w//2, y + h//2)) 
-                
-        
-    def returnFaceCenter(self,faces, idx, mode = 'eyeCenter'):
-        """_summary_
-
-        Args:
-            faces : np.array of size (faceNb,15): array of faceNb faces
-            idx :int: index of the selected face we want to track
-
-        Returns:
-            (np.int16, np.int16): coordinates of the face center in the visual field 
-            The face center can either be the eyeCenter OR the rectangle center 
-        """
-        
-        if faces is not None:
-        
-            if mode == 'eyeCenter':
-                x_eye1,y_eye1, x_eye2, y_eye2 = faces[idx,4:-7]#.astype(np.int32)
-                x_center = (np.round((x_eye1 + x_eye2 )/2 )).astype(np.int16)  
-                y_center = (np.round((y_eye1 + y_eye2 )/2 )).astype(np.int16)  
-                return (x_center, y_center) 
-
-            elif mode == 'rectCenter': 
-                return self.returnBoxCenter(faces[idx,:4])
-        
-        return None
-            
-    
-            
+ 
+                    
     # =======================================================================================
                 
     def recognitionCondition(self,detectionTraject: Trajectory):   
@@ -172,7 +117,7 @@ class FaceDetection():
         self.step +=1
               
         #------ ??? DEVRAIS-JE CREER UNE NOUVELLE CLASSE 'Face' (ou kekchose du genre) 
-        # On veut comparer la courante face avec la precedente face: centre, select_idx
+        # On veut comparer le centre de la face active courante  avec la precedente face: centre, select_idx
         # Parfois j'ai [francois, francois, unrecognized, francois,...]
         # Ou pire: [francois, francois, audrey, francois,...]
         # On veut se baser sur la continuite des centres des images pour conclure 
@@ -190,7 +135,8 @@ class FaceDetection():
                         and not detectionTraject.inFastMotion()        
         # Rem: This condition does not take into account constraints on faceRecognition properties 
         return condition
-       
+    
+    '''    
     def sendToFaceRecognition_v2(self, img, faces ,
                               faceRecognition :FaceRecognition):
         """ 
@@ -204,8 +150,8 @@ class FaceDetection():
             recognizer.alignCrop(src_img: UMat,               face_box: UMat,               aligned_img: UMat               | None = ...) -> UMat: ...
         """
         print('Transferring image to face recognition module via shared memory.')
-       
-    
+    '''   
+    '''
     # TODO ***** ??=======================================================================    
     def increaseBox(self,box):  
         # Because when detecting in image we must adjust the scaling for each image
@@ -218,7 +164,7 @@ class FaceDetection():
         for box in box_list:
             new_box_list.append(self.increaseBox(box))
         return new_box_list
-        
+    '''    
         
     # =======================================================================================    
     def detectFacesFromFile(self,face_name ='unknowns', number=-1):

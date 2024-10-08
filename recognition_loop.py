@@ -9,7 +9,8 @@ import asyncio
 from concurrent.futures import ProcessPoolExecutor  #ThreadPoolExecutor
 
 from face_recognition_SFace_oo_v3 import FaceRecognition
-
+from img_transfer import ImgTransfer
+from result_transfer import ResultTransfer
 
 def recognitionLoop():
     """   Run in process, and asynchronously c"""

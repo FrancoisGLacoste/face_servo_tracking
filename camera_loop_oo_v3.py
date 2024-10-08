@@ -6,16 +6,12 @@ from multiprocessing import Queue #, Manager
 import numpy as np
 import cv2 as cv
 
-# Custom modules and classes
 from img_transfer import ImgTransfer
 from face_detection_yunet_oo_v3 import FaceDetection 
 from face_tracking_oo import FaceTracking
-#from face_recognition_SFace_oo_v3 import FaceRecognition
-from trajectory import Trajectory
-#from image_display_v3 import ImageDisplay
+from trajectory import Trajectory 
 from mode import Mode
 from uart import UART    # Uses pyserial for serial communication
-import visualization_v3 as v    
 import file_management as fl    
 
 # ===================================================================             
@@ -25,13 +21,13 @@ import file_management as fl
 # ===================================================================             
 def cameraLoop(imgTransfer: ImgTransfer, resultQueue: Queue):   
     
-    #os.nice(-10)  # High priority task required elevated privileges (sudo)
+    if hasPrivileges():
+        os.nice(-10)  # High priority task required elevated privileges (sudo)
     
     ifSendData = False
     ifSaveVideo = False 
      
     video = cv.VideoCapture(0)
-    #imgDisplay = ImageDisplay()                                    # To display video frames
     faceDetection = FaceDetection(video) 
     faceTracking = FaceTracking()
     
@@ -41,8 +37,6 @@ def cameraLoop(imgTransfer: ImgTransfer, resultQueue: Queue):
     imgTransfer.createSharedMemory(faceDetection.frameSize) # shared_memory for image transfer 
     
     if ifSendData: uart = UART()               # Serial communication with microcontroller
-    
-    select_idx =  None
     
     # mode: 'faceDetection' OR 'faceTracking 
     # When a face is selected during faceDetection, then faceTracking 
@@ -62,29 +56,25 @@ def cameraLoop(imgTransfer: ImgTransfer, resultQueue: Queue):
             break
         
         if mode.isInDetectionMode(): 
-            #'''imgDisplay.setNewFrame(img)'''
-            faces = faceDetection.detect(img)
+            faces, largestFaceIndex = faceDetection.detect(img)    #faces: List of Face objects
             
-            if faceDetection.isSuccessful and faces is not None:  
-                
-                select_idx = faceDetection.selectLargestFace(faces)   # TODO ? Face class
-                observedCenter = faceDetection.returnFaceCenter(faces, select_idx, 'rectCenter')  # TODO image_box
-                    
-                traject['detection'].appendObs(observedCenter)
+            if faceDetection.isSuccessful and faces is not None:                        
+                activeFace = faces[largestFaceIndex]  # a face object    
+                traject['detection'].appendObs(activeFace.observedCenter)
                 if traject['detection'].isAtFirstStep(): 
-                    traject['detection'].filter.setKalmanInitialState(*observedCenter)
+                    traject['detection'].filter.setKalmanInitialState(*activeFace.observedCenter)  # 
                 traject['detection'].updateFilter()
+                activeFace.smoothCenter = traject['detection'].getLastSmoothPt() 
                 
                 # Tell the face recognition task if it has to run
                 hasToRunRecognition = faceDetection.recognitionCondition(traject['detection'])
         
-          
-            if  mode.isTimeToSwitchToTracking(faces): #(480, 640, 3)
-                faceTracking.initTracker(img, faces[select_idx,:4])                
+            if  mode.isTimeToSwitchToTracking(faces):
+                faceTracking.initTracker(img, activeFace.box)   # activeFace.box= faceArrays[select_idx,:4]  
                 traject['tracking'].reinit()  # Starting from the last filtered obs of detectionTraj              
                           
-        elif mode.isInTrackingMode(): # (480, 640, 3)
-            faces = faceTracking.track(img)
+        elif mode.isInTrackingMode(): 
+            faces = faceTracking.track(img)   # No face object yet   TODO rewrite with face objects
             if not faceTracking.isSuccessful or (faceTracking.score < 0.5):      
                 mode.switchBackToDetection()   
                 traject['tracking'].reinit() 
@@ -102,22 +92,40 @@ def cameraLoop(imgTransfer: ImgTransfer, resultQueue: Queue):
                 # Share the video frames with ImgDisplay and with faceRecognitionTask 
                 imgTransfer.share(img, faces, hasToRunRecognition)
                 
-                #'''imgDisplay.setNewFrame(img)'''    
                 # TODO: "visualization will be on a Tornado server
-                ''' imgDisplay.visualize(transferQueue, traject['detection'], faces, faceDetection.tm, 
-                                     None, select_idx )
-                '''             
-                '''
-                    imgDisplay.visualize(resultQueue, traject['tracking'], 
-                                    faces, faceTracking.tm, faceTracking.score )      
-                '''
+    
         
         if ifSaveVideo:   
             fl.saveVideo(video) #TODO ???? VOIR SI CA MARCHE
 
-        if ifSendData: 
-            # traject[mode.get()]: trajectory object of the active mode (detection or tracking)
-            lastSmoothObs = traject[mode.get()].smoothObs[-1][:2]
-            isSent = uart.sendData(lastSmoothObs)   
+        if ifSendData:     
+            isSent = uart.sendData(activeFace.smoothCenter)   
     cv.destroyAllWindows()
             
+
+
+
+# ============================================================================
+
+from sys import platform
+
+
+def hasPrivileges():
+    """
+    stackoverflow.com/questions/56177557/detect-os-with-python
+    stackoverflow.com/questions/2946746/python-checking-if-a-user-has-administrator-privileges
+    """
+    if platform == "linux" or platform == "linux2":
+        if 'SUDO_USER' in os.environ and os.geteuid() == 0:
+            return (os.environ['SUDO_USER'],True)
+        else:
+            return (os.environ['USERNAME'],False)
+        
+    elif platform == "Windows":   
+        try:
+            # only windows users with admin privileges can read the C:\windows\temp
+            temp = os.listdir(os.sep.join([os.environ.get('SystemRoot','C:\\windows'),'temp']))
+        except:
+            return (os.environ['USERNAME'],False)
+        else:
+            return (os.environ['USERNAME'],True)
