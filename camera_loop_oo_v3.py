@@ -45,11 +45,9 @@ def cameraLoop(imgTransfer: ImgTransfer, resultQueue: Queue):
     
     while video.isOpened():
         isActive, img = video.read()
-        
         if not isActive:
             print('Camera not active!')
             break
-        
         # Tap any key to exit the loop    
         if cv.waitKey(1) > 0:
             print('Exit the camera loop')
@@ -57,7 +55,6 @@ def cameraLoop(imgTransfer: ImgTransfer, resultQueue: Queue):
         
         if mode.isInDetectionMode(): 
             faces, largestFaceIndex = faceDetection.detect(img)    #faces: List of Face objects
-            
             if faceDetection.isSuccessful and faces is not None:                        
                 activeFace = faces[largestFaceIndex]  # a face object    
                 traject['detection'].appendObs(activeFace.observedCenter)
@@ -89,11 +86,10 @@ def cameraLoop(imgTransfer: ImgTransfer, resultQueue: Queue):
             hasToRunRecognition =False
             
         if imgTransfer.isOn : 
-                # Share the video frames with ImgDisplay and with faceRecognitionTask 
-                imgTransfer.share(img, faces, hasToRunRecognition)
-                
-                # TODO: "visualization will be on a Tornado server
-    
+                # Faces and video frames are sent to ImgDisplay and with faceRecognitionTask 
+                imgTransfer.shareFaces(img, faces, hasToRunRecognition)
+                imgTransfer.sendTraject(traject)    # trajectories are sent to image display
+          
         
         if ifSaveVideo:   
             fl.saveVideo(video) #TODO ???? VOIR SI CA MARCHE

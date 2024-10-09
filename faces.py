@@ -73,8 +73,8 @@ class Face:
     
 
 
-    def serialize(self):
-        """  We transform the content of Face object as a dictionary
+    def dict(self):
+        """  We transform the content of Face object into a dictionary
         to be able to serialized it when we send it through a queue or a pipe, 
         or through sockets.
         

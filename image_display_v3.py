@@ -4,7 +4,7 @@
 """  
 image_display_v3.py
 """
-
+import numpy as np
 import cv2 as cv
 
 from trajectory import Trajectory
@@ -17,19 +17,34 @@ from visualization_v3 import GREEN, BLUE
 
 # TODO : in this class: 
 #        Using ImgTransfer retrieve the frame, face objects ( in dictionary or serialized form) 
-#        Using ResultTransfer, retrieve (recognizedName, certainty)
-#        Pay attention to the frame identifier
-#        This class is between ImgTransfer, ResultTransfer and  the tornado VideoStreamHandler
+#        This class is between ImgTransfer and  the tornado VideoStreamHandler
 #        annotate the frames with the other informations to display, and transform them in jpg
 #        It is used in the frame generator that serves VideoStreamHandler
             
 class ImageDisplay:
     
-    def __init__(self, ifVisualize=True):
+    def __init__(self,imgTransfer: ImgTransfer, ifVisualize=True):
         self.ifVisualize = ifVisualize
-        self.img =None
-        self.resultEvent =None
+        self.imgTransfer = imgTransfer
+    
  
+    async def prepareFrame(self):
+        """  Returns annotated frame with boxes, observed centers, """
+        image, facesInfos = self.imgTransfer.retrieveFaceInfos('display')  
+        traject = self.imgTransfer.trajectQueue.get()
+        return self.annotateFrame(image, facesInfos , traject)
+    
+    
+    def annotateFrame(self, image: np.array, facesInfos: list , traject :Trajectory):
+        """ 
+        Annotate each camera frame with informations coming from face_detection or face_tracking
+        through ImgTransfert.
+          
+        Called in server
+        """
+        
+        return np.array([]) # TODO : A FAIRE
+        
     '''#TODO ? Useful or not       
     def setNewFrame(self, newImg):
         self.img =newImg.copy()
