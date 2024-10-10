@@ -4,14 +4,7 @@ import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
 
-
-#from face_detection_yunet_oo import FaceDetection 
-#from visual_tracking_oo import FaceTracking
-#from face_recognition_SFace_oo import FaceRecognition
-#from trajectory import Trajectory
-#import visual_tracking_oo as vt
-
-
+# ===============      TODO       TO BE DESTROYED    at the end    =================     
 GREEN = (10,255,0)
 BLUE  = (255,0,0)
 BLACK = (0,0,0)
@@ -20,41 +13,6 @@ YELLOW = (50,200,200)
 MAGENTA=(255, 0, 255)
 CYAN = (255,255,0)
 BLACK = (0,0,0)
-
-
-# =========================================================================
-# TODO  :  BETTER ORGANIZE, CLEAN   etc 
-#  An IDEA:  
-#   the fonctions:   visualizeTraject_inDetection  &  visualizeTraject_inTracking 
-#   could use some generic visualization functions that are defined in visualization.py 
-#   but be defined as methods of a new class Trajectory
-#  Objects faceDetection and faceTracking, and eventually faceRecognition would be passed as argument
-# Better that defining visualizeDetection and visualizeTraject as it we currently do .
-
-
-# ================  for filtered trajectories ===================================
-
-       
-def visualizeTraject(img, listOfPts, color=GREEN):
-    """
-    Draw the trajectory( listOfPts) of the non-filtered face center coordinates upon the video frame image,
-    Args:
-        img :_type_: image, frame from the video
-        faceCenterTraject :list of (int16,int16) coordinates: 
-                                Trajectory of the non-filtered face center coordinates
-
-    Returns:
-        _type_: image from the video with an additional trajectory drawn upon it
-    """
-    try:
-        for p in listOfPts:
-            x = int(np.round(p[0]))
-            y = int(np.round(p[1]))
-            cv.circle(img, (x,y), 1, color, 1)
-    #except # just skip if fails
-    
-    finally:    
-        return img
 
 
 # =============     For Face Detection ============================================
@@ -68,6 +26,7 @@ def visualizeTraject(img, listOfPts, color=GREEN):
     img = visualizeTraject(img, filteredTraject, BLUE)
     #cv.imshow('Video', img)
     return img
+'''
 '''
 
 def visualizeDetection(img, faceArray,faceCenter, select_id, tm, faceName, recogCertainty,verbose=False ):
@@ -99,9 +58,9 @@ def visualizeDetection(img, faceArray,faceCenter, select_id, tm, faceName, recog
             score = face[-1]
             coords = face[:-1].astype(np.int32)              
             x,y,w,h,x_eye1,y_eye1,x_eye2,y_eye2,x_nose,y_nose,x_mouth1,y_mouth1,x_mouth2,y_mouth2 = coords
-            message = '''Face {}: nose = ({:.0f}, {:.0f}),
+            message = """Face {}: nose = ({:.0f}, {:.0f}),
                         eye1 = ({:.0f}, {:.0f}),eye2 = ({:.0f}, {:.0f}), 
-                        surface = {:.0f}, score = {:.2f}'''                     
+                        surface = {:.0f}, score = {:.2f}"""                     
             if verbose:
                 print(message.format(idx,x_nose, y_nose,x_eye1,y_eye1,x_eye2,y_eye2, w*h, score))
             
@@ -122,12 +81,12 @@ def visualizeDetection(img, faceArray,faceCenter, select_id, tm, faceName, recog
             
             cv.rectangle(img, (x, y), (x+w, y+h),boxColor, boxThickness)
             cv.circle(img, (x_center, y_center), RED, thickness)
-            '''cv.circle(img, (x_eye1,y_eye1), 2, RED, thickness)
+            """cv.circle(img, (x_eye1,y_eye1), 2, RED, thickness)
             cv.circle(img, (x_eye2,y_eye2), 2, BLUE, thickness)
             cv.circle(img, (x_nose,y_nose), 2, CYAN, thickness)
             cv.circle(img, (x_mouth1,y_mouth1), 2, MAGENTA, thickness)
             cv.circle(img, (x_mouth2,y_mouth2), 2, YELLOW, thickness)            
-            '''
+            """
             try:
                 cv.putText(img,
                         ('Face {}: surface = {:.0f}, score = {:.2f}'
@@ -144,7 +103,7 @@ def visualizeDetection(img, faceArray,faceCenter, select_id, tm, faceName, recog
         fps, detectTime), (1, 16), cv.FONT_HERSHEY_SIMPLEX, 0.5, BLACK, 2) 
     return img
 
-
+'''
 
 # ================ For Face Tracking =====================================================
 '''def visualizeTraject_inTracking(faceCenterTraject, filteredTraject,
@@ -159,6 +118,7 @@ def visualizeDetection(img, faceArray,faceCenter, select_id, tm, faceName, recog
     #cv.imshow('Video', img)
     return img
  '''  
+'''
 def visualizeTracking(image, bbox, smoothCenter, score, tm, name=None):
    
     
@@ -195,15 +155,15 @@ def visualizeTracking(image, bbox, smoothCenter, score, tm, name=None):
     cv.circle(output, (xc, yc), 4, GREEN, thickness)
     cv.putText(output, '{:.2f}'.format(score), (x, y+25), cv.FONT_HERSHEY_SIMPLEX, fontScale, textColor, thickness)
 
-    '''
+    """
     text_size, baseline = cv.getTextSize('Target lost!', cv.FONT_HERSHEY_SIMPLEX, fontScale, fontSize)
     text_x = int((w - text_size[0]) / 2)
     text_y = int((h - text_size[1]) / 2)
     cv.putText(output, 'Target lost!', (text_x, text_y), cv.FONT_HERSHEY_SIMPLEX, fontScale, (0, 0, 255), fontSize)
-    '''
+    """
     return output   
 
-    
+ '''   
 # ==================================================================
 
 def plotTraject(x,y, t, x_label = "t     [seconds]" ):

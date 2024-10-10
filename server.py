@@ -39,7 +39,7 @@ class MyVideoStreamHandler(VideoStreamHandler):
     async def get(self):
         self.set_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
         while True:
-            frame = await self.get_frame(self.imgDisplay)  # Fetch a single frame
+            frame = await self.generateFrame()  # Fetch a single frame
             if frame is None:
                 break
             self.write(b"--frame\r\n")
@@ -49,15 +49,13 @@ class MyVideoStreamHandler(VideoStreamHandler):
             self.write(b"\r\n")
             await self.flush()
 
-    async def get_frame(self ):
+    async def generateFrame(self ):
+        """   Generator that returns (yields) frames in JPEG format"""
         while True:
             try:
                 frame = await self.imgDisplay.prepareFrame() 
                 if frame is None:
                     break  # end of stream 
-                
-                # encode in jpeg:
-                # HOW ??
                 
                 yield frame
             except Exception as e:
