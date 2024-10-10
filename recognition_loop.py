@@ -30,30 +30,28 @@ def recognitionLoop():
     '''
     
 # ================== For the execution of face recognition loop ===============          
-async def faceRecognitionTask(faceRecognition: FaceRecognition, imgTransfer: ImgTransfer, resultTransfer: ResultTransfer):
+async def faceRecognitionTask(faceRecognition: FaceRecognition, 
+                              imgTransfer: ImgTransfer, 
+                              resultTransfer: ResultTransfer):
     """ 
     """
-    
+    ProcessPoolExecutor()
    
     while True:  
         # This loop mirrors the camera videocapture loop
         print('Ready to receive the last face image that has been detected.')
-        img, boxes =imgTransfer.retrieveImage()   
+       
+        img, boxes = imgTransfer.retrieveFaceBoxes()   
         print('We got a new face image for the face recognition task to process.')
         
-        # Face recognition per se 
         faceImgs = faceRecognition.cropBoxes(img, boxes)    
         results=list()
         for faceImg in faceImgs:            
             recognizedName, certainty = faceRecognition.recognizeFace(faceImg)
             results.append((faceImg, recognizedName, certainty))
             index = '?'
-            resultTransfer.resutQueue.put([index, recognizedName, certainty])    
-            # Transfer the results to imgDisplay via a mp.queue or via mp.Manager
-            # TODO How to synchronize the display of recognizedName and certainty on the video frame ?
-            # ? Est-ce je devrais pas numeroter les frames (un index) pour nous assurer de 
-            # retourner les resultats a la bonne image ?
-        
+            resultTransfer.resultQueue.put([index, recognizedName, certainty])    
+    
         '''# Put the result in the result queue: the result is sent to retrieveResults()
         await self.resultTransfer.put(results) 
         #TODO For now it is sent via a queue, but it should 
