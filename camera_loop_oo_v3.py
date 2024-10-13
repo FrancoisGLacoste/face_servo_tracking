@@ -19,7 +19,7 @@ import file_management as fl
 # It sends coord to servo via serial port, 
 # and put face images in a queue for face recognition. 
 # ===================================================================             
-def cameraLoop(imgTransfer: ImgTransfer, resultQueue: Queue):   
+def cameraLoop(imgTransfer: ImgTransfer):   
     
     if hasPrivileges():
         os.nice(-10)  # High priority task required elevated privileges (sudo)

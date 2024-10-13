@@ -3,7 +3,7 @@
 import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
-
+#   "LEGACY" SHIT ===================================================================
 # ===============      TODO       TO BE DESTROYED    at the end    =================     
 GREEN = (10,255,0)
 BLUE  = (255,0,0)

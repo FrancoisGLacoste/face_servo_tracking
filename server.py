@@ -1,10 +1,10 @@
 # -*- encoding: utf-8 -*-
 
-
-
+import asyncio
 import tornado.ioloop
 import tornado.web
 from tornado.web import RequestHandler, VideoStreamHandler 
+from tornado.websocket import WebSocketHandler
 
 from image_display_v3 import ImageDisplay
 from img_transfer import ImgTransfer        
@@ -16,7 +16,8 @@ def make_app(imgTransfer: ImgTransfer):
         (r"/", MainHandler),
         (r"/video", MyVideoStreamHandler, dict(imgTransfer = imgTransfer)),
         """imgDisplay is initialized in the handler using imgTransfer, 
-        but imgTransfer itself is not retained as an attribute."""
+        but imgTransfer itself is not retained as an attribute.""",
+        (r"/table", )
     ])
 
 
@@ -53,7 +54,7 @@ class MyVideoStreamHandler(VideoStreamHandler):
         """   Generator that returns (yields) frames in JPEG format"""
         while True:
             try:
-                frame = await self.imgDisplay.prepareFrame() 
+                frame = await asyncio.to_thread(self.imgDisplay.prepareFrame_sync()) 
                 if frame is None:
                     break  # end of stream 
                 
@@ -61,7 +62,20 @@ class MyVideoStreamHandler(VideoStreamHandler):
             except Exception as e:
                 print(e)
                 
-  
+# =====================================================
+
+class FacesInfosWebSocket(WebSocketHandler):
+    
+    def open(self):
+        print('websocket opened')
+        
+        
+    def on_message(self, message):
+        self.write_message('blablabla')
+    
+    def on_close(self):
+        NotImplemented
+              
         
         
 #   =====================================================

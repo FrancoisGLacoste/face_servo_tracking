@@ -4,8 +4,9 @@
 img_transfer.py
 
 """
-#import multiprocessing as mp
-from multiprocessing import Queue, shared_memory, Event
+import multiprocessing as mp
+from multiprocessing import shared_memory, Event
+#import asyncio 
 
 import numpy as np
 
@@ -22,16 +23,16 @@ class ImgTransfer:
         self.isOn = isOn          # i.e. image transfer is on  
         
         # Queue for image metadata needed to access shared memory
-        self.imgQueue = {'recognition': Queue(),   # Image transfer to the face recognition task
-                         'display':     Queue()    # Image transfer to the video stream
+        self.imgQueue = {'recognition': mp.Queue(),   # Image transfer to the face recognition task
+                         'display':     mp.Queue()    # Image transfer to the video stream
                          }
        
         self.facesQueue = {
-            'recognition': Queue(), # for sending box coordinates to the face recognition task
-            'display':     Queue()  # for sending face dict infos to imageDisplay and the video stream 
+            'recognition': mp.Queue(), # for sending box coordinates to the face recognition task
+            'display':     mp.Queue()  # for sending face dict infos to imageDisplay and the video stream 
             }
         
-        self.trajectQueue = Queue() # for sending trajectories to imageDisplay and the video stream 
+        self.trajectQueue = mp.Queue() # for sending trajectories to imageDisplay and the video stream 
          
         # For the image transfer to both ImageDisplay and face recognition task:
         self.ready_event = Event()# Signal when shared memory is ready for access
@@ -58,12 +59,6 @@ class ImgTransfer:
         except Exception as e:
             print(f"Error cleaning up shared memory: {e}")
     
-    def sharedMemoryExists(self, shmName):
-        """   
-        Test if a shared memory named shmName already exists in memory. 
-        No simple way to implement.... 
-        """     
-        NotImplemented
            
     def createSharedMemory(self, frameSize):            
         frameNb =ImgTransfer.FRAME_NUMBER
@@ -87,7 +82,7 @@ class ImgTransfer:
                 print(f'Cannot create the shared memory. Error: {e}')    
  
     # ================================================================================
-    # On the sender side    
+    # On the sender side   : Sync 
      
     def shareFaces(self, frame: np.array, faces: list, hasToRunRecognition: bool):
         """  
@@ -228,8 +223,8 @@ class ImgTransfer:
             print(f'Error: {e}')
     '''    
 
-    def retrieveFaceInfos(self, target: str):
-        """ Retrieve the face informations to send them to the target module."""
+    def retrieveFaces(self, target: str):
+        """ Retrieve the face image and face infos to send them to the target module."""
         try:
             self.ready_event.wait()        # wait for shareImage to be ready_event.set() 
             image = self.retrieveImage(target)
