@@ -4,6 +4,8 @@
 """  
 image_display_v3.py
 """
+import asyncio
+
 import numpy as np
 import cv2 as cv
 
@@ -34,7 +36,7 @@ class ImageDisplay:
         self.imgTransfer = imgTransfer
     
  
-    def prepareFrame_sync(self):
+    async def prepareFrame_async(self):
         """  
         Prepares annotated frame with boxes, centers, trajectories, and other infos 
         and returns it in JPEG format .
@@ -43,8 +45,8 @@ class ImageDisplay:
         the Tornado VideoStreamHandler, which runs in an async event-loop.
         This sync version must run in asyncio.to_thread() to avoid being blocking the event-loop
         """
-        frame, facesInfos = self.imgTransfer.retrieveFaces('display')  
-        traject =  self.imgTransfer.trajectQueue.get()
+        frame, facesInfos = await self.imgTransfer.retrieveFaces('display')  
+        traject =  asyncio.to_thread(self.imgTransfer.trajectQueue.get() )
         
         frameWithBox  = self.displayBox(frame, facesInfos)
         annotatedFrame = self.annotateFrame(frameWithBox, facesInfos)

@@ -3,16 +3,18 @@
 import sys
 import signal # for exiting gracefully by tapping CTRL-C, CTRL-Z
 #import asyncio
+
 import multiprocessing as mp
 import logging 
 
-import numpy as np
+#import tornado.ioloop
 
 from img_transfer import ImgTransfer
 from result_transfer import ResultTransfer
 from camera_loop_oo_v3 import cameraLoop
 from recognition_loop import recognitionLoop
 #from face_recognition_SFace_oo_v3 import faceRecognitionTask
+from server import Server, serverTask
 
 def handle_exit(signum, frame):
         print("To exit 'gracefully' when tapping CTRL-C , CTRL-Z etc...")
@@ -27,19 +29,23 @@ def main():
     resultTransfer = ResultTransfer()     # Sends the result to the server
     
     # Create the (CPU-bound) process for the servo-tracking of faces
-    camera_process = mp.Process(target=cameraLoop, args=(imgTransfer,resultTransfer,) )
+    # eventually: rewrite cameraLoop in C++
+    cameraProcess = mp.Process(target=cameraLoop, args=(imgTransfer,) ) 
    
     # Create the process that run the faceRecognition task in an async event-loop,   
-    recognition_process = mp.Process(target=recognitionLoop, args=(imgTransfer,
-                                                                    resultTransfer,)  ) 
-    camera_process.start()
-    recognition_process.start()
-
-     
-
-    camera_process.join()
-    recognition_process.join()
+    recognitionProcess = mp.Process(target=recognitionLoop, args=(imgTransfer,resultTransfer,)) 
     
+    
+    # Tornado server for videoStreaming and GUI
+    server = Server(imgTransfer, port=8888)
+    serverThread = server.startInThread()
+                                                                        
+    cameraProcess.start()
+    recognitionProcess.start()
+    
+    cameraProcess.join()
+    recognitionProcess.join()
+    serverThread.join() 
     
 # ===============================================================================
 #   TODO ?            Test

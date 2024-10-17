@@ -9,7 +9,7 @@ import json
 
 
 import file_management as fl 
-import visualization as v
+import visualization_v3 as v
 
 """
  We use the Kalman Filter already implemented in OpenCV : 

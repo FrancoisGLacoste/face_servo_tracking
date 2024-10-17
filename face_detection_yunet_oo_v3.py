@@ -27,9 +27,7 @@ class FaceDetection():
         self.nms_threshold  = nms_threshold
         self.top_k = top_k
         self.modelPath = YUNET_DETECTION_PATH
-        
         self.detector =  self._createFaceDetector_yunet()
-        self.isSuccessful = False
         
         # Set dimensions and size ( bytes) of the frames to detect
         if isinstance(video,cv.VideoCapture): 
@@ -72,15 +70,19 @@ class FaceDetection():
         """ 
         Returns: list of Face objects (not necessarily in order of size )
         """            
-        self.tm.reset()    
-        self.tm.start()  # TODO :  can we have processingTime as member of FaceDetector ?
-        self.isSuccessful, facesArray = self.detector.detect(img) 
-        self.tm.stop()
+        try:
+            self.tm.reset()    
+            self.tm.start()  
+            isSuccessful, facesArray = self.detector.detect(img) 
+            self.tm.stop()
+        except Exception as e: 
+            print(e)
         
-        faces = self.createFaceObjectList(self, facesArray)   
-        activeFaceIndex = self.selectLargestFaceIndex(self, facesArray)
-        return faces, activeFaceIndex
-    
+        if isSuccessful and facesArray is not None:
+            faces = self.createFaceObjectList( facesArray)   
+            activeFaceIndex = self.selectLargestFaceIndex( facesArray)
+            return faces, activeFaceIndex
+        return None,None
     
     # ===================================================================================
     

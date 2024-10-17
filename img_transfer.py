@@ -6,7 +6,7 @@ img_transfer.py
 """
 import multiprocessing as mp
 from multiprocessing import shared_memory, Event
-#import asyncio 
+import asyncio 
 
 import numpy as np
 
@@ -23,6 +23,8 @@ class ImgTransfer:
         self.isOn = isOn          # i.e. image transfer is on  
         
         # Queue for image metadata needed to access shared memory
+        # We use mp.queue inside asyncio.to_thread() instead of asyncio.queue because the latter
+        # is not process-safe ( we transfer data between 2 processes).
         self.imgQueue = {'recognition': mp.Queue(),   # Image transfer to the face recognition task
                          'display':     mp.Queue()    # Image transfer to the video stream
                          }
@@ -88,18 +90,25 @@ class ImgTransfer:
         """  
         Args:
             frame : image frame 
-            faces : list of Face objects 
+            faces : list of Face objects ( can have several faces in the camera frame)
             hasToRunRecognition : if we also send data to the recognition module.
         """
         self.shareImage(frame )
 
-        # Face informations we need to send to the recognition loop and the image display 
-        faceInfos = {'recognition': [face.boxes  for face in faces],
+
+        # For all faces, we send the face box to the recognition task and 
+        # send all face attributes (dict) to the image display module:
+        faceInfos = {'recognition': [face.box  for face in faces],
                         'display'    : [face.dict() for face in faces]}
 
         targets = ['recognition','display'] if hasToRunRecognition else ['display']
+        
+        # The target module is either 'recognition' or 'display'
+        # content is respectiv. face box or the face attribute dict of each face
+        target_content = [ (t,faceInfos[t]) for t in targets]
         try:          
-            for target, content in zip(targets, faceInfos):
+            for target, content in target_content: 
+                
                 # Sending face information to the target module
                 self.facesQueue[target].put(content)   
 
@@ -153,7 +162,7 @@ class ImgTransfer:
         # TODO : add a condition: do we really always want to display the trajectories
         # It is only interesting with respect to the kalman filter calibration, 
         # But it is not for the final typical user.  
-        self.trajectQueue.put(traject)
+        self.trajectQueue.put(traject.toDict())
         
         
     # =========================================================================================
@@ -185,7 +194,7 @@ class ImgTransfer:
                 self.readers_done.value = 0
         self.ready_event.clear()
 
-    def retrieveImage(self, target:str):
+    async def retrieveImage(self, shm_name:str, shape, dtype, frameIndex):
         """   
         Retrieves an image (frame) from the shared memory. 
         ( Does not retrieve the face boxes and other face imformations)
@@ -193,14 +202,14 @@ class ImgTransfer:
         target : string: target module, i.e. either 'recognition' or 'display'
         """
         try:
-            shm_name, shape, dtype, frameIndex = self.imgQueue[target].get()
-            print('Image metadata have been retrieved from  imgQueue.')
                 
             self.existing_shm = shared_memory.SharedMemory(name=shm_name)
             frameSize = self.existing_shm.size 
             buffer = self.existing_shm.buf[frameIndex*frameSize: (frameIndex + 1) * frameSize]
             np_array = np.ndarray(shape, dtype=dtype, buffer=buffer)
-            image = np.array(np_array)
+            image = np.array(np_array)   # TODO Is it a direct access memory or do I still copy the array. 
+            # For efficiency, GPT advise me to use direct access memory ( not tested yet)
+            
             print(f'The image have been retrieved from the shared memory. type={type(image)} ')
         
             # increment to show that this function has been called once more time
@@ -223,12 +232,18 @@ class ImgTransfer:
             print(f'Error: {e}')
     '''    
 
-    def retrieveFaces(self, target: str):
+    async def retrieveFaces(self, target: str):
         """ Retrieve the face image and face infos to send them to the target module."""
         try:
-            self.ready_event.wait()        # wait for shareImage to be ready_event.set() 
-            image = self.retrieveImage(target)
-            facesList = self.facesQueue[target].get() # Either list of face.dict() or of face.box
+            # TODO Is it weird to have an event.wait inside an async function ??!!
+            self.ready_event.wait()        # wait for shareImage to be ready_event.set()
+             
+            # TODO : most of these metadata are redundant since name shape dtype is only needed once
+            shm_name, shape, dtype, frameIndex = asyncio.to_thread(self.imgQueue[target].get() )
+            print('Image metadata have been retrieved from  imgQueue.')
+
+            image = await self.retrieveImage( shm_name, shape, dtype, frameIndex) 
+            facesList = asyncio.to_thread(self.facesQueue[target].get() ) # Either list of face.dict() or of face.box
             print('Face dictionary informations have been retrieved from facesQueue')
 
             return image, facesList

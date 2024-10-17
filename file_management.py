@@ -12,7 +12,8 @@ from PIL import Image
 import imghdr
 import json 
 
-from trajectory import Trajectory
+#    TODO      CE FICHIER EST A REPENSER/restructurer.....  A VOIR  
+#from trajectory import Trajectory
 
 
 # Finding the path of the base directory i.e path were this file is placed
@@ -43,21 +44,8 @@ class NpEncoder(json.JSONEncoder):
             return obj.tolist()
         else:
             return super(NpEncoder, self).default(obj)
-   
-def saveTraject(traject:Trajectory, mode):
-    n=1
-    # If faceCenterTraject is long enough, we save it in JSON to represent
-    # the non-filtered signal behavior in the case of each mode 
-    # (detection mode and tracking mode)  
-    traject_filename = join(BASE_DIR, f'faceCenterTraject_{n}_{mode}.json')
 
-    if len(traject.observations) > 20:
-        with open(traject_filename, 'w') as f:
-            data = {'coord': traject.observations, 
-                    'time':traject.observationsTime}
-            json.dump(data, f, cls=NpEncoder)
- 
-  
+
 def openTraject(file):
     """We open and plot the trajectory To visualize how we should filter it."""
     
@@ -75,6 +63,15 @@ def openTraject(file):
     t = [ (t - t_[0]) for t in t_ ]
     return x,y,t 
    
+def saveNpData(data, filename):
+    """  Used in Trajectory.saveTraject()
+            surely we can use it elsewhere !
+    """
+    filepath = join(BASE_DIR, filename)
+    with open(filepath, 'w') as f:
+        json.dump(data, f, cls=NpEncoder)
+
+  
    
 # =======================================================================================
 #        File management for images                                                     #     

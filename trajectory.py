@@ -7,7 +7,7 @@ import numpy as np
 from numpy.linalg import norm 
 
 from filtering_oo import Filtering
-
+import file_management as f
 
 class Trajectory:
    
@@ -22,7 +22,6 @@ class Trajectory:
         self.smoothObs = list()                          # = Filtering.prediction 
         self.observationsTime = list() 
 
-                  
     def getMode(self):
         return self.modeLabel
         
@@ -125,3 +124,33 @@ class Trajectory:
             #fl.saveTraject(detectionTraject, mode)         
             self.reinit()       
      '''   
+
+    # ------------------------------------------------------------------------------------     
+
+    def saveTraject(self, mode):
+        n=1
+        
+        # If traject is long enough, we save it in JSON 
+        
+        filename =f'faceCenterTraject_{n}_{mode}.json'
+        data = {'coord': self.observations, 
+                    'time':self.observationsTime}
+        if len(self.observations) > 20:
+            f.saveNpData(data,filename)
+
+    def toDict(self):
+        """ 
+        Transform the Trajectory object into a serializable dictionary.
+        (except for the filter)
+        """
+        """
+        return {'mode':self.modeLabel, 
+                'observations': self.observations,
+                'smoothObs':self.smoothObs,
+                'observationsTime':self.observationsTime}              
+        """
+        trajDict = self.__dict__.copy()
+        for k in ['filter', 'format']:  # Remove these keys from the dict
+            kpop = trajDict.pop(k)        
+        return trajDict
+    

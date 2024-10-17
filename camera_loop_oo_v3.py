@@ -9,6 +9,7 @@ import cv2 as cv
 from img_transfer import ImgTransfer
 from face_detection_yunet_oo_v3 import FaceDetection 
 from face_tracking_oo import FaceTracking
+from faces import Face 
 from trajectory import Trajectory 
 from mode import Mode
 from uart import UART    # Uses pyserial for serial communication
@@ -32,7 +33,7 @@ def cameraLoop(imgTransfer: ImgTransfer):
     faceTracking = FaceTracking()
     
     # Declare trajectories objects for both modes, including the Kalman filters
-    traject = {mode: Trajectory(mode) for mode in ['detection', 'tracking']}
+    trajects = {mode: Trajectory(mode) for mode in ['detection', 'tracking']}
     
     imgTransfer.createSharedMemory(faceDetection.frameSize) # shared_memory for image transfer 
     
@@ -53,37 +54,40 @@ def cameraLoop(imgTransfer: ImgTransfer):
             print('Exit the camera loop')
             break
         
-        if mode.isInDetectionMode(): 
+        hasToRunRecognition = False
+        if mode.isInDetectionMode(): # TODO: l'objet Mode semble superflu  *********
+            traject = trajects['detection']
             faces, largestFaceIndex = faceDetection.detect(img)    #faces: List of Face objects
-            if faceDetection.isSuccessful and faces is not None:                        
+            if faces is not None:                        
                 activeFace = faces[largestFaceIndex]  # a face object    
-                traject['detection'].appendObs(activeFace.observedCenter)
-                if traject['detection'].isAtFirstStep(): 
-                    traject['detection'].filter.setKalmanInitialState(*activeFace.observedCenter)  # 
-                traject['detection'].updateFilter()
-                activeFace.smoothCenter = traject['detection'].getLastSmoothPt() 
+                traject.appendObs(activeFace.observedCenter)
+                if traject.isAtFirstStep(): 
+                    traject.filter.setKalmanInitialState(*activeFace.observedCenter)  # 
+                traject.updateFilter()
+                activeFace.smoothCenter = traject.getLastSmoothPt() 
                 
-                # Tell the face recognition task if it has to run
-                hasToRunRecognition = faceDetection.recognitionCondition(traject['detection'])
-        
+                # Tell the face recognition task if it has to run   
+                hasToRunRecognition = False#faceDetection.recognitionCondition(traject['detection'])
+                # *****
+                
             if  mode.isTimeToSwitchToTracking(faces):
                 faceTracking.initTracker(img, activeFace.box)   # activeFace.box= faceArrays[select_idx,:4]  
-                traject['tracking'].reinit()  # Starting from the last filtered obs of detectionTraj              
+                traject = trajects['tracking']
+                traject.reinit()  # Starting from the last filtered obs of detectionTraj              
                           
         elif mode.isInTrackingMode(): 
-            faces = faceTracking.track(img)   # No face object yet   TODO rewrite with face objects
-            if not faceTracking.isSuccessful or (faceTracking.score < 0.5):      
+            face = faceTracking.track(img)   # Face object, including box and observedCenter in  np.int16  
+            if face is None or (face.score < 0.5):   
+                # We lost track of the face   
                 mode.switchBackToDetection()   
-                traject['tracking'].reinit() 
+                traject.reinit() 
                 continue
-            
-            observedCenter = faceDetection.returnBoxCenter(faces)  # np.int16        
-            traject['tracking'].appendObs(observedCenter)
-            traject['tracking'].updateFilter()
+                  
+            traject.appendObs(face.observedCenter)
+            traject.updateFilter()
       
-            if traject['tracking'].needAcquisition():
-                traject['tracking'].acquisition(mode.getModeTime())    # TODO: A FAIRE !!?????
-            hasToRunRecognition =False
+            if traject.needAcquisition():
+                traject.acquisition()    # TODO: A FAIRE !!?????
             
         if imgTransfer.isOn : 
                 # Faces and video frames are sent to ImgDisplay and with faceRecognitionTask 
@@ -112,11 +116,13 @@ def hasPrivileges():
     stackoverflow.com/questions/2946746/python-checking-if-a-user-has-administrator-privileges
     """
     if platform == "linux" or platform == "linux2":
-        if 'SUDO_USER' in os.environ and os.geteuid() == 0:
-            return (os.environ['SUDO_USER'],True)
+        return ('SUDO_USER' in os.environ and os.geteuid() == 0)
+        '''    return (os.environ['SUDO_USER'],True)
         else:
             return (os.environ['USERNAME'],False)
+        '''
         
+    '''
     elif platform == "Windows":   
         try:
             # only windows users with admin privileges can read the C:\windows\temp
@@ -125,3 +131,4 @@ def hasPrivileges():
             return (os.environ['USERNAME'],False)
         else:
             return (os.environ['USERNAME'],True)
+    '''

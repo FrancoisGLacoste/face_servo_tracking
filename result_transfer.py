@@ -21,7 +21,7 @@ class ResultTransfer:
         
         # It is said this kind of test is safer and idiomatic in Python
         try:
-            # Wait 0.05 s or until a result arrives. 
+            # Wait 0.05 s or until a result arrives.   TODO SHOULD WE WAIT ??!!
             result = self.resultQueue.get(timeout=self.timeout)
             print(f'Received {result} for visualization.')
             index, faceName, certainty = result

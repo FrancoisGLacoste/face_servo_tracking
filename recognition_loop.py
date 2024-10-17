@@ -12,7 +12,7 @@ from face_recognition_SFace_oo_v3 import FaceRecognition
 from img_transfer import ImgTransfer
 from result_transfer import ResultTransfer
 
-def recognitionLoop():
+def recognitionLoop(imgTransfer : ImgTransfer, resultTransfer: ResultTransfer):
     """   Run in process, and asynchronously c"""
 
     # Create a FaceRecognition object

@@ -8,12 +8,12 @@ import os
 import numpy as np
 import cv2 as cv
 
+from faces import Face
 from file_management import VIT_TRACKING_PATH 
 
 def isCuda():  
     try:
-        return (cv.cuda.getCudaEnabledDeviceCount() > 0)
-       
+        return (cv.cuda.getCudaEnabledDeviceCount() > 0) 
     except:
         return False
 
@@ -28,8 +28,6 @@ class FaceTracking():
     def __init__(self):
         self.tm = cv.TickMeter() 
         self.tracker = self._createFaceTracker_vittrack()
-        self.isSuccessful = False
-        self.score = None
         
     def _createFaceTracker_vittrack(self):   
         
@@ -61,9 +59,15 @@ class FaceTracking():
 
     def track(self, img: np.ndarray):
         """  img: cv2.typing.MatLike, Umap"""
-        self.tm.reset() # to monitor tracking algo performance 
-        self.tm.start()
-        self.isSuccessful, faces = self.tracker.update(img) # tuple[bool, cv2.typing.Rect]
-        self.score = self.tracker.getTrackingScore()
-        self.tm.stop()
-        return faces   # faceTuple
+        
+        try:
+            self.tm.reset() # to monitor tracking algo performance 
+            self.tm.start()
+            isSuccessful, faceBox = self.tracker.update(img) # tuple[bool, cv2.typing.Rect]
+            score = self.tracker.getTrackingScore()
+            self.tm.stop()
+        except Exception as e:
+            print(e)
+        if isSuccessful and faceBox is not None:    
+            return Face([1], faceBox, score, self.tm, 'tracking')
+            
