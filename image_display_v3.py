@@ -33,7 +33,9 @@ class ImageDisplay:
     
     def __init__(self,imgTransfer: ImgTransfer, ifVisualize=True):
         self.ifVisualize = ifVisualize   # TODO WHERE WILL WE USE IT ?????
-        self.imgTransfer = imgTransfer
+        self.imgTransfer = imgTransfer   
+        # TODO les longueurs des queues devrait etre limitees a 2 et le contenu plus ancien 
+        # devrait se perdre au lieu de s'accumuler dans la queue, et ne doit pas planter non plus.
     
  
     async def prepareFrame_async(self):

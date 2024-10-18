@@ -95,41 +95,44 @@ class ImgTransfer:
         """
         self.shareImage(frame )
 
+        if faces is not None:
+            # For all faces, we send the face box to the recognition task and 
+            # send all face attributes (dict) to the image display module:
+            faceInfos = {'recognition': [face.box  for face in faces],
+                            'display'    : [face.dict() for face in faces]}
 
-        # For all faces, we send the face box to the recognition task and 
-        # send all face attributes (dict) to the image display module:
-        faceInfos = {'recognition': [face.box  for face in faces],
-                        'display'    : [face.dict() for face in faces]}
+            targets = ['recognition','display'] if hasToRunRecognition else ['display']
+            
+            # The target module is either 'recognition' or 'display'
+            # content is respectiv. face box or the face attribute dict of each face
+            target_content = [ (t,faceInfos[t]) for t in targets]
+            try:          
+                for target, content in target_content: 
+                    
+                    # Sending face information to the target module
+                    self.facesQueue[target].put(content)   
 
-        targets = ['recognition','display'] if hasToRunRecognition else ['display']
-        
-        # The target module is either 'recognition' or 'display'
-        # content is respectiv. face box or the face attribute dict of each face
-        target_content = [ (t,faceInfos[t]) for t in targets]
-        try:          
-            for target, content in target_content: 
-                
-                # Sending face information to the target module
-                self.facesQueue[target].put(content)   
+                    # Sending image metadata to the target module
+                    self.imgQueue[target].put((self.shm.name, frame.shape, 
+                                                    frame.dtype, self.frameIndex) )
+                    print('Image metadata have been put in the image queue.')
+                    self.ready_event.set()  # Tell retrieveImage it is ready
 
-                # Sending image metadata to the target module
-                self.imgQueue[target].put((self.shm.name, frame.shape, 
-                                                frame.dtype, self.frameIndex) )
-                print('Image metadata have been put in the image queue.')
-                self.ready_event.set()  # Tell retrieveImage it is ready
-
-                '''
-                # Once an image is shared, it does not prevent it to write the next image
-                # even if some processses are still reading the previous image. 
-                # Because we write and read in a shared memory that can contains at least 3 images.
-                
-                TODO : What to do with these events ???  Is seems useful but no more sure.... 
-                self.done_event.wait()  # ? wait for confirmation from retrieve_image() AND ImgDisplay 
-                self.done_event.clear()
-                '''
-        except Exception as e:
-            print(f'Error: {e}')
-
+                    '''
+                    # Once an image is shared, it does not prevent it to write the next image
+                    # even if some processses are still reading the previous image. 
+                    # Because we write and read in a shared memory that can contains at least 3 images.
+                    
+                    TODO : What to do with these events ???  Is seems useful but no more sure.... 
+                    self.done_event.wait()  # ? wait for confirmation from retrieve_image() AND ImgDisplay 
+                    self.done_event.clear()
+                    '''
+            except Exception as e:
+                print(f'Error: {e}')
+        else: 
+            print('no faces to send. We only share the camera frame (image).')
+            
+            
     def shareImage(self, frame: np.array):
         """ 
         Put an image (frame) in the shared memory block at the position of frameIndex.

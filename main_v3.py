@@ -14,7 +14,7 @@ from result_transfer import ResultTransfer
 from camera_loop_oo_v3 import cameraLoop
 from recognition_loop import recognitionLoop
 #from face_recognition_SFace_oo_v3 import faceRecognitionTask
-from server import Server, serverTask
+from server import Server
 
 def handle_exit(signum, frame):
         print("To exit 'gracefully' when tapping CTRL-C , CTRL-Z etc...")

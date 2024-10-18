@@ -94,7 +94,7 @@ class KnnClassifier:
         """
         X: np.array(1,d) : feature embedding of the current face to classify 
 
-        Returns : tupl: faceNames prediction, prediction index, prediction probability   
+        Returns : tupl: prediction index, prediction probability   
         
         """
         model = self.clfs[metric] # KNeighborsClassifier object
@@ -106,7 +106,6 @@ class KnnClassifier:
                                     reverse=True)
       
         predicted_index, pred_proba = predictions_sorted[0]               
-        #return self.faceNames[predicted_index], pred_proba 
         return predicted_index, pred_proba
     
     # =================================================================================

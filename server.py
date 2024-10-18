@@ -32,13 +32,15 @@ class Server:
             (r"/file", FileHandler),
         ])
 
-    def start(self):
+    def startIOLoop(self):
         httpServer = tornado.httpserver.HTTPServer(self.app)
         httpServer.listen(self.port )
+        print('tornado ioloop is running')
         tornado.ioloop.IOLoop.current().start()
+        print("This line will never be printed: once the ioloop is started, it loops 'forever'.")
 
     def startInThread(self):
-        serverThread = threading.Thread(target=self.start)
+        serverThread = threading.Thread(target=self.startIOLoop)
         serverThread.start()
         return serverThread
   
