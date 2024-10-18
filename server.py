@@ -78,7 +78,8 @@ class VideoStreamHandler(tornado.web.RequestHandler):
                 await self.flush() # Ensure the frame is sent. 
         except Exception as e:
             print(f"Error during streaming:{e}")     
-
+            raise # Topropage the error ???
+        
     async def generateFrame(self ):
         """   Generator that returns (yields) frames in JPEG format"""
         while True:
